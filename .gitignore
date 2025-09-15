@@ -1,0 +1,28 @@
+# Python Byte-compiled / Optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+.app/routers/__pycache__
+.app/routers/__pycache__/* */
+
+# Environments
+venv/
+.venv/
+env/
+
+# Secret Keys - IMPORTANT
+.env
+
+# IDE-specific folders
+.vscode/
+.idea/
+
+# Distribution / packaging
+dist/
+build/
+eggs/
+*.egg-info/
+*.egg
+
+# Installer logs
+pip-log.txt
