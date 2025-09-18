@@ -23,7 +23,7 @@ def create_workout_from_log(db: Session, log: WorkoutLog) -> models.Workout:
         db_exercise_set = models.ExerciseSet(
             id=str(uuid.uuid4()),
             exercise_name=ai_set.exercise_name,
-            set_number=i + 1,
+            set_number=ai_set.sets,
             reps=ai_set.reps,
             weight=ai_set.weight,
             weight_unit=ai_set.weight_unit,
@@ -33,3 +33,16 @@ def create_workout_from_log(db: Session, log: WorkoutLog) -> models.Workout:
     
     db.commit()
     return db_workout
+
+
+def print_workout_log(log: WorkoutLog):
+    print("\n--- AI Structured Workout Log ---")
+    for i, ai_set in enumerate(log.sets):
+        print(f"  Set {i + 1}:")
+        print(f"    Exercise: {ai_set.exercise_name}")
+        print(f"    Reps: {ai_set.reps}")
+        print(f"    Weight: {ai_set.weight} {ai_set.weight_unit}")
+        print(f"    Sets: {ai_set.sets}")
+    print("---------------------------------\n")
+    # Return a temporary Workout object to satisfy the router's response model
+    return models.Workout(id="test_id_123", notes="Log printed to console.")

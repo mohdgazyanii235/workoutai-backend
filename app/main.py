@@ -5,6 +5,8 @@ from app.database import engine
 from app.routers import log
 import os
 from dotenv import load_dotenv
+import uvicorn
+
 
 load_dotenv()
 
@@ -17,3 +19,6 @@ app.include_router(log.router)
 @app.get("/")
 def read_root():
     return {"message": "Workout AI Backend is running!"}
+
+if __name__ == '__main__':
+    uvicorn.run(app, port=8000, host='192.168.28.8')

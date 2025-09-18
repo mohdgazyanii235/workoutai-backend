@@ -13,6 +13,7 @@ router = APIRouter(
 def create_workout_from_voice(log: schemas.WorkoutLogCreate, db: Session = Depends(get_db)):
     # 1. Get the raw text from the request.
     raw_text = log.text
+    print(raw_text)
 
     # 2. Call the AI service to get structured data.
     structured_data = ai_service.structure_workout_text(raw_text)
