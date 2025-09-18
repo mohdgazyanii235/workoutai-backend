@@ -8,7 +8,8 @@ class User(Base):
     __tablename__ = 'users'
     id = Column(String, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String, nullable=False)
+    # Make password nullable for SSO users
+    password_hash = Column(String, nullable=True) 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     workouts = relationship("Workout", back_populates="user")
 

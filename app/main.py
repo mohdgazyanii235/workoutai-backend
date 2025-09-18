@@ -2,10 +2,11 @@
 from fastapi import FastAPI
 from app import models
 from app.database import engine
-from app.routers import log
+from app.routers import log, auth
 import os
 from dotenv import load_dotenv
 import uvicorn
+from starlette.middleware.sessions import SessionMiddleware
 
 
 load_dotenv()
@@ -14,11 +15,10 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+app.include_router(auth.router)
 app.include_router(log.router)
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 
 @app.get("/")
 def read_root():
     return {"message": "Workout AI Backend is running!"}
-
-if __name__ == '__main__':
-    uvicorn.run(app, port=8000, host='192.168.28.8')
