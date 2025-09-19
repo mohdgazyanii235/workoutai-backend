@@ -1,8 +1,12 @@
+# app/crud.py
 from sqlalchemy.orm import Session
 import uuid
 from . import models, schemas
-from .services.ai_service import WorkoutLog, ExerciseSet as AISet
+from .services.ai_service import WorkoutLog
 from app.auth import auth_service
+
+def get_user(db: Session, id: str):
+    return db.query(models.User).filter(models.User.id == id).first()
 
 def get_user_by_email(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
@@ -11,21 +15,38 @@ def create_user(db: Session, user: schemas.UserCreate):
     hashed_password = None
     if user.password:
         hashed_password = auth_service.get_password_hash(user.password)
+
     db_user = models.User(
-        id=str(uuid.uuid4()), 
-        email=user.email, 
-        password_hash=hashed_password
+        id=str(uuid.uuid4()),
+        email=user.email,
+        password_hash=hashed_password,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        date_of_birth=user.date_of_birth,
+        city=user.city,
+        country=user.country,
+        weight_kg=user.weight_kg,
+        height_cm=user.height_cm,
     )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
     return db_user
 
-# --- Updated Workout CRUD Function ---
+def update_user_profile(db: Session, user_id: str, update: schemas.UserUpdate) -> models.User:
+    db_user = get_user(db, id=user_id)
+    if not db_user:
+        return None
+    for field, value in update.model_dump(exclude_unset=True).items():
+        setattr(db_user, field, value)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
 def create_workout_from_log(db: Session, log: WorkoutLog, user_id: str) -> models.Workout:
     db_workout = models.Workout(
-        id=str(uuid.uuid4()), 
-        user_id=user_id, # Use the real user_id
+        id=str(uuid.uuid4()),
+        user_id=user_id,
         notes="Workout logged via voice."
     )
     db.add(db_workout)
@@ -43,18 +64,6 @@ def create_workout_from_log(db: Session, log: WorkoutLog, user_id: str) -> model
             workout_id=db_workout.id
         )
         db.add(db_exercise_set)
-    
+
     db.commit()
     return db_workout
-
-def print_workout_log(log: WorkoutLog):
-    print("\n--- AI Structured Workout Log ---")
-    for i, ai_set in enumerate(log.sets):
-        print(f"  Set {i + 1}:")
-        print(f"    Exercise: {ai_set.exercise_name}")
-        print(f"    Reps: {ai_set.reps}")
-        print(f"    Weight: {ai_set.weight} {ai_set.weight_unit}")
-        print(f"    Sets: {ai_set.sets}")
-    print("---------------------------------\n")
-    # Return a temporary Workout object to satisfy the router's response model
-    return models.Workout(id="test_id_123", notes="Log printed to console.")

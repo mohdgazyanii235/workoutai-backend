@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from app import models
 from app.database import engine
-from app.routers import log, auth
+from app.routers import log, auth, users
 import os
 from dotenv import load_dotenv
 import uvicorn
@@ -17,6 +17,7 @@ app = FastAPI()
 
 app.include_router(auth.router)
 app.include_router(log.router)
+app.include_router(users.router)
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 
 @app.get("/")
