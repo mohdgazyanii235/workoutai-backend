@@ -12,6 +12,7 @@ def get_user_by_email(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
 
 def create_user(db: Session, user: schemas.UserCreate):
+    """Create minimal user at signup; onboarding fills the rest later."""
     hashed_password = None
     if user.password:
         hashed_password = auth_service.get_password_hash(user.password)
@@ -20,25 +21,22 @@ def create_user(db: Session, user: schemas.UserCreate):
         id=str(uuid.uuid4()),
         email=user.email,
         password_hash=hashed_password,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        date_of_birth=user.date_of_birth,
-        city=user.city,
-        country=user.country,
-        weight_kg=user.weight_kg,
-        height_cm=user.height_cm,
+        # all profile fields start as NULL
+        is_onboarded=False,  # critical: onboarding not completed yet
     )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
     return db_user
 
-def update_user_profile(db: Session, user_id: str, update: schemas.UserUpdate) -> models.User:
+def update_user_profile(db: Session, user_id: str, update: schemas.UserUpdate):
     db_user = get_user(db, id=user_id)
     if not db_user:
         return None
     for field, value in update.model_dump(exclude_unset=True).items():
         setattr(db_user, field, value)
+    # when onboarding submits, mark complete
+    db_user.is_onboarded = True
     db.commit()
     db.refresh(db_user)
     return db_user
@@ -47,7 +45,7 @@ def create_workout_from_log(db: Session, log: WorkoutLog, user_id: str) -> model
     db_workout = models.Workout(
         id=str(uuid.uuid4()),
         user_id=user_id,
-        notes="Workout logged via voice."
+        notes=log.note
     )
     db.add(db_workout)
     db.commit()

@@ -24,7 +24,7 @@ from app.database import get_db
 # ------------------------------------------------------------------------------
 
 # NOTE: Use a strong, unique SECRET_KEY in production. Prefer loading from env.
-SECRET_KEY: str = os.getenv("SECRET_KEY", "a_super_secret_dev_key")
+SECRET_KEY: str = os.getenv("SECRET_KEY")
 ALGORITHM: str = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
