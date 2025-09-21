@@ -16,7 +16,7 @@ class ExerciseSet(BaseModel):
 class WorkoutLog(BaseModel):
     sets: List[ExerciseSet] = Field(description="A list of all the exercise sets in the workout.")
     note: str = Field(description="The user's notes on the workout.")
-
+    workout_type: str = Field(description="This is the type of workout the user did.")
 # Initialize the OpenAI model
 llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2)
 
@@ -35,7 +35,7 @@ def structure_workout_text(text: str) -> WorkoutLog:
     IMPORTANT: Only output the JSON object. Do not include any other text, greetings, or explanations.
 
     Here is an example:
-    User input: "I did bench press 3 sets of 10 at 80kg, then 2 sets of bicep curls at 15 lbs for 12 reps. Overall I had a great workout but I think I could have pushed harder"
+    User input: "I did a chest workout, I did bench press 3 sets of 10 at 80kg, then 2 sets of bicep curls at 15 lbs for 12 reps. Overall I had a great workout but I think I could have pushed harder"
     Your output:
     {{
         "sets": [
@@ -54,7 +54,8 @@ def structure_workout_text(text: str) -> WorkoutLog:
                 "sets": 2
             }}
         ],
-        "note": "You said that you had a great workout but next time focus on having some simple carbs before your workout so you can push harder!"
+        "note": "You said that you had a great workout but next time focus on having some simple carbs before your workout so you can push harder!",
+        "workout_type": "Chest"
     }}
     It is important for you to note that sometimes a user may parse do a body weight exercise, in which case you want to parse the weight to be 0 and unit to be kgs.
     Now, parse the following user workout description:

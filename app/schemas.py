@@ -1,6 +1,6 @@
 # app/schemas.py
 from pydantic import BaseModel, Field, EmailStr
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 class UserBase(BaseModel):
@@ -38,8 +38,13 @@ class Token(BaseModel):
 class WorkoutLogCreate(BaseModel):
     text: str
 
-class Workout(BaseModel):
+class WorkoutBase(BaseModel):
     id: str
     notes: Optional[str] = None
+    workout_type: Optional[str] = None
+    created_at: datetime
     class Config:
         from_attributes = True
+
+class Workout(WorkoutBase):
+    user_id: str

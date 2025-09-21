@@ -45,7 +45,8 @@ def create_workout_from_log(db: Session, log: WorkoutLog, user_id: str) -> model
     db_workout = models.Workout(
         id=str(uuid.uuid4()),
         user_id=user_id,
-        notes=log.note
+        notes=log.note,
+        workout_type=log.workout_type
     )
     db.add(db_workout)
     db.commit()

@@ -30,6 +30,7 @@ class Workout(Base):
     id = Column(String, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     notes = Column(String, nullable=True)
+    workout_type = Column(String, nullable=True)
     user_id = Column(String, ForeignKey('users.id'))
     user = relationship("User", back_populates="workouts")
     sets = relationship("ExerciseSet", back_populates="workout")
