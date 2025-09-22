@@ -29,9 +29,9 @@ def get_workouts(
 
 
 # GET a single workout detail
-@router.get("/{workout_id}", response_model=schemas.Workout)
+@router.get("/{workout_id}", response_model=schemas.WorkoutDetail)
 def get_workout(
-    workout_id: str,  # ✅ UUID is str
+    workout_id: str,
     db: Session = Depends(database.get_db),
     current_user: schemas.User = Depends(get_current_user),
 ):

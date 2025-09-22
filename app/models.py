@@ -19,6 +19,8 @@ class User(Base):
     country = Column(String, nullable=True)
     weight_kg = Column(Float, nullable=True)
     height_cm = Column(Float, nullable=True)
+    
+    
 
     # NEW: server-truth for onboarding
     is_onboarded = Column(Boolean, nullable=False, default=False)
