@@ -23,5 +23,5 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 
 @app.get("/")
 def read_root():
-    return {"message": "Workout AI Backend is running!"}
+    return {"message": "Nice try :)"}
 

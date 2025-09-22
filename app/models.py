@@ -1,6 +1,7 @@
 # app/models.py
 import datetime
 from sqlalchemy import Column, String, DateTime, Float, Integer, ForeignKey, Boolean, Date
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -17,15 +18,25 @@ class User(Base):
     date_of_birth = Column(Date, nullable=True)
     city = Column(String, nullable=True)
     country = Column(String, nullable=True)
-    weight_kg = Column(Float, nullable=True)
-    height_cm = Column(Float, nullable=True)
-    
-    
 
-    # NEW: server-truth for onboarding
+    # Strenght Information
+    weight = Column(JSON, default=list, nullable=True)
+    height = Column(Float, nullable=True)
+    fat_percentage = Column(JSON, default=list, nullable=True)
+    deadlift_1rm = Column(JSON, default=list, nullable=True)
+    squat_1rm = Column(JSON, default=list, nullable=True)
+    bench_1rm = Column(JSON, default=list, nullable=True)
+
+    # Goals
+    goal_weight = Column(Float, nullable=True)
+    goal_fat_percentage = Column(Float, nullable=True)
+    goal_deadlift_1rm = Column(Float, nullable=True)
+    goal_squat_1rm = Column(Float, nullable=True)
+    goal_bench_1rm = Column(Float, nullable=True)
+
     is_onboarded = Column(Boolean, nullable=False, default=False)
-
     workouts = relationship("Workout", back_populates="user")
+    
 
 class Workout(Base):
     __tablename__ = 'workouts'

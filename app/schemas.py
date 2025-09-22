@@ -1,13 +1,17 @@
 # app/schemas.py
 from pydantic import BaseModel, Field, EmailStr
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional, List
+
+class HistoryEntry(BaseModel):
+    date: date
+    value: float
 
 class UserBase(BaseModel):
     email: EmailStr
 
 class UserCreate(UserBase):
-    password: Optional[str] = None  # email+password signup only
+    password: Optional[str] = None 
 
 class UserUpdate(BaseModel):
     first_name: Optional[str] = None
@@ -15,8 +19,21 @@ class UserUpdate(BaseModel):
     date_of_birth: Optional[date] = None
     city: Optional[str] = None
     country: Optional[str] = None
-    weight_kg: Optional[float] = Field(None, ge=0)
-    height_cm: Optional[float] = Field(None, ge=0)
+
+
+    weight: Optional[List[HistoryEntry]] = None
+    height: Optional[float] = Field(None, ge=0)
+    fat_percentage: Optional[List[HistoryEntry]] = None
+    deadlift_1rm: Optional[List[HistoryEntry]] = None
+    squat_1rm: Optional[List[HistoryEntry]] = None
+    bench_1rm: Optional[List[HistoryEntry]] = None
+
+    goal_weight: Optional[float] = None
+    goal_fat_percentage: Optional[float] = None
+    goal_deadlift_1rm: Optional[float] = None
+    goal_squat_1rm: Optional[float] = None
+    goal_bench_1rm: Optional[float] = None
+
 
 class User(UserBase):
     id: str
@@ -25,9 +42,18 @@ class User(UserBase):
     date_of_birth: Optional[date] = None
     city: Optional[str] = None
     country: Optional[str] = None
-    weight_kg: Optional[float] = None
-    height_cm: Optional[float] = None
-    is_onboarded: bool  # NEW
+    weight: List[HistoryEntry] = []
+    height: Optional[float] = None
+    is_onboarded: bool
+    fat_percentage: List[HistoryEntry] = []
+    deadlift_1rm: List[HistoryEntry] = []
+    squat_1rm: List[HistoryEntry] = []
+    bench_1rm: List[HistoryEntry] = []
+    goal_weight: Optional[float] = None
+    goal_fat_percentage: Optional[float] = None
+    goal_deadlift_1rm: Optional[float] = None
+    goal_squat_1rm: Optional[float] = None
+    goal_bench_1rm: Optional[float] = None
     class Config:
         from_attributes = True
 

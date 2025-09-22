@@ -4,6 +4,7 @@ import uuid
 from . import models, schemas
 from .services.ai_service import WorkoutLog
 from app.auth import auth_service
+import datetime
 
 def get_user(db: Session, id: str):
     return db.query(models.User).filter(models.User.id == id).first()
@@ -33,13 +34,38 @@ def update_user_profile(db: Session, user_id: str, update: schemas.UserUpdate):
     db_user = get_user(db, id=user_id)
     if not db_user:
         return None
-    for field, value in update.model_dump(exclude_unset=True).items():
-        setattr(db_user, field, value)
-    # when onboarding submits, mark complete
+
+    update_data = update.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        if field in ["weight", "fat_percentage", "deadlift_1rm", "squat_1rm", "bench_1rm"] and value:
+            current = getattr(db_user, field) or []
+            normalized = []
+            for entry in value:
+                if hasattr(entry, "model_dump"):  # Pydantic model
+                    data = entry.model_dump()
+                else:  # dict
+                    data = dict(entry)
+
+                # 🔹 Convert date objects to strings
+                if isinstance(data.get("date"), (datetime.date, datetime.datetime)):
+                    data["date"] = data["date"].isoformat()
+
+                normalized.append(data)
+
+            current.extend(normalized)
+            setattr(db_user, field, current)
+        else:
+            # Convert date_of_birth too, since it is a Date column (but DB can handle this type)
+            setattr(db_user, field, value)
+
     db_user.is_onboarded = True
     db.commit()
     db.refresh(db_user)
     return db_user
+
+
+
 
 def create_workout_from_log(db: Session, log: WorkoutLog, user_id: str) -> models.Workout:
     db_workout = models.Workout(

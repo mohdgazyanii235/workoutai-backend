@@ -11,7 +11,6 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("/me", response_model=schemas.User)
 def get_me(current_user: Annotated[schemas.User, Depends(get_current_user)], db: Session = Depends(get_db)):
     db_user = crud.get_user(db, id=current_user.id)
-    print(db_user.is_onboarded)
     if not db_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return db_user

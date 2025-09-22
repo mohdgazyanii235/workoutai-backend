@@ -41,6 +41,7 @@ async def auth_google_token(token_data: GoogleToken, db: Session = Depends(get_d
 def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
+        print("error")
         raise HTTPException(status_code=400, detail="Email already registered")
     return crud.create_user(db=db, user=user)
 
