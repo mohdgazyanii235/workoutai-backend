@@ -5,8 +5,9 @@ from app import schemas, crud
 from app.database import get_db
 from app.services import ai_service
 from app.auth.auth_service import get_current_user
+from app.security.security import get_api_key
 
-router = APIRouter(prefix="/log", tags=["log"])
+router = APIRouter(prefix="/log", tags=["log"], dependencies=[Depends(get_api_key)])
 
 @router.post("/voice", response_model=schemas.Workout)
 def create_workout_from_voice(

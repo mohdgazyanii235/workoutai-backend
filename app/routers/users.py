@@ -5,8 +5,9 @@ from typing import Annotated
 from app import schemas, crud
 from app.database import get_db
 from app.auth.auth_service import get_current_user
+from app.security.security import get_api_key
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(prefix="/users", tags=["users"], dependencies=[Depends(get_api_key)])
 
 @router.get("/me", response_model=schemas.User)
 def get_me(current_user: Annotated[schemas.User, Depends(get_current_user)], db: Session = Depends(get_db)):

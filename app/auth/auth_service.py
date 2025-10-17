@@ -28,9 +28,8 @@ SECRET_KEY: str = os.getenv("SECRET_KEY")
 ALGORITHM: str = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
-# This matches your /auth router's token endpoint (prefix=/auth)
-# so OAuth2 clients know where to fetch tokens from.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
+
 
 # ------------------------------------------------------------------------------
 # Password Hashing

@@ -5,10 +5,12 @@ from typing import List
 
 from .. import models, schemas, database, crud
 from app.auth.auth_service import get_current_user
+from app.security.security import get_api_key
 
 router = APIRouter(
     prefix="/workouts",
     tags=["workouts"],
+    dependencies=[Depends(get_api_key)]
 )
 
 @router.get("/", response_model=List[schemas.Workout])
