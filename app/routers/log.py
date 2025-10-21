@@ -6,6 +6,7 @@ from app.database import get_db
 from app.services import ai_service
 from app.auth.auth_service import get_current_user
 from app.security.security import get_api_key
+from app.services.ai_service import InvalidWorkoutException
 
 router = APIRouter(prefix="/log", tags=["log"], dependencies=[Depends(get_api_key)])
 
@@ -16,12 +17,13 @@ def create_workout_from_voice(
     current_user: Annotated[schemas.User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-    raw_text = log.text
-    structured_data = ai_service.structure_workout_text(raw_text)
-
-    if structured_data:
-        workout = crud.create_workout_from_log(db, structured_data, user_id=current_user.id)
-        return workout
     
-    # Handle cases where the AI might fail
-    raise HTTPException(status_code=400, detail="Failed to parse workout text.")
+    try:
+        raw_text = log.text
+        structured_data = ai_service.structure_workout_text(raw_text)
+
+        if structured_data:
+            workout = crud.create_workout_from_log(db, structured_data, user_id=current_user.id)
+            return workout
+    except InvalidWorkoutException as e:
+        raise HTTPException(status_code=400, detail=str(e))

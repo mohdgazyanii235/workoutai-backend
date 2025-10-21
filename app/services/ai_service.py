@@ -7,6 +7,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# --- NEW: Define a custom exception ---
+class InvalidWorkoutException(ValueError):
+    """Custom exception for non-workout text."""
+    pass
+# -------------------------------------
+
 # Define the desired data structure for a single exercise set
 class ExerciseSet(BaseModel):
     exercise_name: str = Field(description="The name of the exercise performed, e.g., 'Bench Press'")
@@ -20,6 +26,7 @@ class WorkoutLog(BaseModel):
     sets: List[ExerciseSet] = Field(description="A list of all the exercise sets in the workout.")
     note: str = Field(description="The user's notes on the workout.")
     workout_type: str = Field(description="This is the type of workout the user did.")
+
 # Initialize the OpenAI model
 llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2)
 
@@ -29,6 +36,8 @@ parser = PydanticOutputParser(pydantic_object=WorkoutLog)
 def structure_workout_text(text: str) -> WorkoutLog:
     """
     Uses LangChain to parse raw text and return a structured WorkoutLog object.
+    
+    --- NEW: Raises InvalidWorkoutException if the text is not a valid workout. ---
     """
     prompt_template = """
     You are an expert fitness assistant. Your task is to parse a user's raw text description of their workout
@@ -46,14 +55,14 @@ def structure_workout_text(text: str) -> WorkoutLog:
                 "exercise_name": "Bench Press",
                 "reps": 10,
                 "weight": 80,
-                "weight_unit": "kg"
+                "weight_unit": "kg",
                 "sets": 3
             }},
             {{
                 "exercise_name": "Bicep Curls",
                 "reps": 12,
                 "weight": 15,
-                "weight_unit": "lbs"
+                "weight_unit": "lbs",
                 "sets": 2
             }}
         ],
@@ -76,14 +85,27 @@ def structure_workout_text(text: str) -> WorkoutLog:
     chain = prompt | llm | parser
     
     try:
-        # The fix is to add a comma to make this a tuple
         chain_with_retry = chain.with_retry(
-            retry_if_exception_type=(Exception,), # Added comma here
+            retry_if_exception_type=(Exception,),
             stop_after_attempt=2
         )
         structured_response = chain_with_retry.invoke({"user_text": text})
+        
+        # --- NEW: Check if the 'sets' list is empty ---
+        if not structured_response.sets:
+            raise InvalidWorkoutException("Nice try")
+        # ---------------------------------------------
+            
         print(structured_response)
         return structured_response
+        
+    # --- NEW: Catch our custom exception first ---
+    except InvalidWorkoutException as e:
+        print(f"Invalid workout text detected: {e}")
+        raise e  # Re-raise it so the API route can catch it
+    # -------------------------------------------
     except Exception as e:
         print(f"Error processing text with LangChain after retries: {e}")
-        return None
+        # --- NEW: Treat any other parsing error as an invalid attempt ---
+        raise InvalidWorkoutException("Nice try")
+        # -----------------------------------------------------------
