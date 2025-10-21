@@ -48,3 +48,19 @@ def get_workout(
     if not workout:
         raise HTTPException(status_code=404, detail="Workout not found")
     return workout
+
+
+@router.delete("/{workout_id}", response_model=schemas.Workout)
+def delete_workout(
+    workout_id: str,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(get_current_user),
+):
+    # Call the new CRUD function
+    deleted_workout = crud.delete_workout(db, workout_id=workout_id, user_id=current_user.id)
+    
+    if not deleted_workout:
+        raise HTTPException(status_code=404, detail="Workout not found")
+        
+    # Return the workout that was deleted as confirmation
+    return deleted_workout

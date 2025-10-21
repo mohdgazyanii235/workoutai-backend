@@ -92,3 +92,31 @@ def create_workout_from_log(db: Session, log: WorkoutLog, user_id: str) -> model
 
     db.commit()
     return db_workout
+
+def delete_workout(db: Session, workout_id: str, user_id: str) -> models.Workout | None:
+    # First, find the workout to ensure it exists and belongs to the user
+    db_workout = (
+        db.query(models.Workout)
+        .filter(
+            models.Workout.id == workout_id,
+            models.Workout.user_id == user_id
+        )
+        .first()
+    )
+    
+    if not db_workout:
+        return None  # Workout not found or doesn't belong to user
+
+    # 1. Delete all child exercise sets linked to this workout
+    # We do this first to satisfy the foreign key constraint
+    db.query(models.ExerciseSet).filter(
+        models.ExerciseSet.workout_id == workout_id
+    ).delete(synchronize_session=False)
+
+    # 2. Now, delete the workout itself
+    db.delete(db_workout)
+    
+    # 3. Commit the transaction
+    db.commit()
+    
+    return db_workout
