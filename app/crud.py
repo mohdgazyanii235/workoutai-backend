@@ -5,6 +5,7 @@ from . import models, schemas
 from .services.ai_service import WorkoutLog
 from app.auth import auth_service
 import datetime
+from typing import Optional
 
 def get_user(db: Session, id: str):
     return db.query(models.User).filter(models.User.id == id).first()
@@ -67,12 +68,16 @@ def update_user_profile(db: Session, user_id: str, update: schemas.UserUpdate):
 
 
 
-def create_workout_from_log(db: Session, log: WorkoutLog, user_id: str) -> models.Workout:
+def create_workout_from_log(db: Session, log: WorkoutLog, user_id: str, created_at: Optional[datetime.datetime] = None) -> models.Workout:
+
+    workout_timestamp = created_at if created_at else datetime.datetime.utcnow()
+
     db_workout = models.Workout(
         id=str(uuid.uuid4()),
         user_id=user_id,
         notes=log.note,
-        workout_type=log.workout_type
+        workout_type=log.workout_type,
+        created_at=workout_timestamp
     )
     db.add(db_workout)
     db.commit()

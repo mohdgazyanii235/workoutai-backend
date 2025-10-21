@@ -63,6 +63,7 @@ class Token(BaseModel):
 
 class WorkoutLogCreate(BaseModel):
     text: str
+    created_at: Optional[datetime] = None
 
 class WorkoutBase(BaseModel):
     id: str

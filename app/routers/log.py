@@ -12,8 +12,7 @@ router = APIRouter(prefix="/log", tags=["log"], dependencies=[Depends(get_api_ke
 
 @router.post("/voice", response_model=schemas.Workout)
 def create_workout_from_voice(
-    log: schemas.WorkoutLogCreate, 
-    # Reorder the parameters: required ones first, then ones with defaults
+    log: schemas.WorkoutLogCreate,
     current_user: Annotated[schemas.User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
@@ -23,7 +22,7 @@ def create_workout_from_voice(
         structured_data = ai_service.structure_workout_text(raw_text)
 
         if structured_data:
-            workout = crud.create_workout_from_log(db, structured_data, user_id=current_user.id)
+            workout = crud.create_workout_from_log(db, structured_data, user_id=current_user.id, created_at=log.created_at)
             return workout
     except InvalidWorkoutException as e:
         raise HTTPException(status_code=400, detail=str(e))
