@@ -77,8 +77,6 @@ class Workout(WorkoutBase):
     user_id: str
 
 
-# in schemas.py
-
 class ExerciseSet(BaseModel):
     id: str
     exercise_name: str
@@ -92,3 +90,16 @@ class ExerciseSet(BaseModel):
 class WorkoutDetail(WorkoutBase):
     user_id: str
     sets: list[ExerciseSet] = []
+
+class ExerciseSetUpdate(BaseModel):
+    id: Optional[str] = None
+    exercise_name: str
+    set_number: int
+    reps: int
+    weight: float
+    weight_unit: str
+
+class WorkoutUpdate(BaseModel):
+    notes: Optional[str] = None
+    workout_type: Optional[str] = None
+    sets: Optional[List[ExerciseSetUpdate]] = None

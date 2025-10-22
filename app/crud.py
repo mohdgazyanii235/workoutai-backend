@@ -1,4 +1,3 @@
-# app/crud.py
 from sqlalchemy.orm import Session
 import uuid
 from . import models, schemas
@@ -66,7 +65,79 @@ def update_user_profile(db: Session, user_id: str, update: schemas.UserUpdate):
     return db_user
 
 
+def update_workout(
+    db: Session,
+    workout_id: str,
+    workout_update: schemas.WorkoutUpdate,
+    user_id: str # Ensure only the owner can update
+) -> Optional[models.Workout]:
 
+    # Fetch the existing workout, ensuring it belongs to the current user
+    db_workout = db.query(models.Workout).filter(
+        models.Workout.id == workout_id,
+        models.Workout.user_id == user_id
+    ).first()
+
+    if not db_workout:
+        return None # Workout not found or doesn't belong to the user
+
+    # 1. Update Workout fields (notes, workout_type) if provided
+    update_data = workout_update.model_dump(exclude_unset=True) # Get only fields present in the request
+    if "notes" in update_data:
+        db_workout.notes = update_data["notes"] # Handles null correctly
+    if "workout_type" in update_data:
+        db_workout.workout_type = update_data["workout_type"]
+
+    # Mark the workout object as modified in the session
+    db.add(db_workout)
+
+    # 2. Handle Exercise Sets update if 'sets' field is present in the request
+    if workout_update.sets is not None:
+        # Get dictionary of current sets from DB, keyed by their ID
+        current_sets_db = {s.id: s for s in db_workout.sets}
+        # Keep track of set IDs present in the incoming update payload
+        incoming_set_ids = set()
+
+        for set_data in workout_update.sets:
+            if set_data.id and set_data.id in current_sets_db:
+                # --- UPDATE existing set ---
+                db_set = current_sets_db[set_data.id]
+                db_set.exercise_name = set_data.exercise_name
+                db_set.set_number = set_data.set_number # Update set number
+                db_set.reps = set_data.reps
+                db_set.weight = set_data.weight
+                db_set.weight_unit = set_data.weight_unit
+                db.add(db_set) # Mark existing set as modified
+                incoming_set_ids.add(set_data.id) # Mark this ID as processed
+            elif not set_data.id:
+                # --- CREATE new set --- (ID is None or missing)
+                db_new_set = models.ExerciseSet(
+                    id=str(uuid.uuid4()), # Generate new ID
+                    exercise_name=set_data.exercise_name,
+                    set_number=set_data.set_number, # Use number from payload
+                    reps=set_data.reps,
+                    weight=set_data.weight,
+                    weight_unit=set_data.weight_unit,
+                    workout_id=db_workout.id # Link to the parent workout
+                )
+                db.add(db_new_set)
+                # No need to add to incoming_set_ids as new sets don't exist in current_sets_db
+            # else: (Case where ID is provided but doesn't exist - ignore or raise error if needed)
+            #    pass
+
+        # --- DELETE sets that are in the DB but were NOT in the incoming payload ---
+        set_ids_to_delete = current_sets_db.keys() - incoming_set_ids
+        for set_id in set_ids_to_delete:
+            db.delete(current_sets_db[set_id])
+
+    try:
+        db.commit()
+        db.refresh(db_workout) # Refresh to load relationships correctly
+        return db_workout
+    except Exception as e:
+        db.rollback() # Rollback in case of error during commit
+        print(f"Error updating workout: {e}") # Or use logger
+        raise e # Re-raise the exception to be handled by the endpoint
 
 def create_workout_from_log(db: Session, log: WorkoutLog, user_id: str, created_at: Optional[datetime.datetime] = None) -> models.Workout:
 
