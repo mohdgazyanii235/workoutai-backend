@@ -41,7 +41,7 @@ class User(Base):
 class Workout(Base):
     __tablename__ = 'workouts'
     id = Column(String, primary_key=True, index=True)
-    created_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
     notes = Column(String, nullable=True)
     workout_type = Column(String, nullable=True)
     user_id = Column(String, ForeignKey('users.id'))

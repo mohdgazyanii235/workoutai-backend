@@ -7,6 +7,7 @@ import time # <-- Import time
 from fastapi import FastAPI, Request # <-- Import Request
 import os
 from dotenv import load_dotenv
+import json
 import uvicorn
 from starlette.middleware.sessions import SessionMiddleware
 import logging
@@ -45,18 +46,35 @@ app = FastAPI()
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
-    # Log basic request info
-    logger.info(f"Request: {request.method} {request.url.path} - From: {request.client.host}")
     
-    response = await call_next(request) # Process the request
-    
-    process_time = (time.time() - start_time) * 1000 # Calculate duration in ms
-    # Log response info
-    logger.info(f"Response: {response.status_code} - Process Time: {process_time:.2f}ms")
-    
-    return response
-# --- End Request Logging Middleware ---
+    # 1. Capture request body if it's not a GET/DELETE request
+    request_body_log = {}
+    if request.method not in ["GET", "DELETE"]:
+        try:
+            # Read the body as bytes
+            body = await request.body()
+            # Try to decode and parse as JSON
+            request_body_log = json.loads(body.decode('utf-8'))
+            
+            # Re-insert the body back into the request's scope so the endpoint can read it
+            request._body = body 
+        except json.JSONDecodeError:
+            request_body_log = {"error": "Could not decode request body as JSON"}
+        except Exception as e:
+            request_body_log = {"error": f"Failed to read request body: {e}"}
 
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    
+    # Log the request details
+    logger.info(
+        f"Request: {request.client.host}:{request.client.port} - "
+        f"{request.method} {request.url.path} "
+        f"Status: {response.status_code} "
+        f"Processing Time: {process_time:.4f}s "
+        f"Request Body: {json.dumps(request_body_log)}" # Log the captured body
+    )
+    return response
 app.include_router(auth.router)
 app.include_router(log.router)
 app.include_router(users.router)

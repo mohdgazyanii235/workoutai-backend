@@ -70,7 +70,7 @@ def update_user_profile(db: Session, user_id: str, update: schemas.UserUpdate):
 
 def create_workout_from_log(db: Session, log: WorkoutLog, user_id: str, created_at: Optional[datetime.datetime] = None) -> models.Workout:
 
-    workout_timestamp = created_at if created_at else datetime.datetime.utcnow()
+    workout_timestamp = created_at if created_at else datetime.datetime.now(datetime.timezone.utc)
 
     db_workout = models.Workout(
         id=str(uuid.uuid4()),
