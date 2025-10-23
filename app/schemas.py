@@ -103,3 +103,16 @@ class WorkoutUpdate(BaseModel):
     notes: Optional[str] = None
     workout_type: Optional[str] = None
     sets: Optional[List[ExerciseSetUpdate]] = None
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class VerifyOTPRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(..., min_length=6, max_length=6)
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(..., min_length=6, max_length=6)
+    new_password: str = Field(..., min_length=6)

@@ -58,3 +58,14 @@ class ExerciseSet(Base):
     weight_unit = Column(String, default='kg')
     workout_id = Column(String, ForeignKey('workouts.id'))
     workout = relationship("Workout", back_populates="sets")
+
+
+# --- ADD THIS NEW MODEL ---
+class PasswordResetOTP(Base):
+    __tablename__ = 'password_reset_otps'
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey('users.id'), nullable=False)
+    otp_code = Column(String, nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    
+    user = relationship("User")
