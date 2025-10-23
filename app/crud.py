@@ -199,6 +199,43 @@ def delete_workout(db: Session, workout_id: str, user_id: str) -> models.Workout
     return db_workout
 
 
+def create_manual_workout(db: Session, workout_data: schemas.WorkoutUpdate, user_id: str) -> models.Workout:
+    # 1. Create the parent Workout
+    db_workout = models.Workout(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        notes=workout_data.notes,
+        workout_type=workout_data.workout_type,
+        created_at=datetime.datetime.now(datetime.timezone.utc) # Use current time
+    )
+    db.add(db_workout)
+    
+    # 2. Create the child ExerciseSets
+    if workout_data.sets:
+        for set_data in workout_data.sets:
+            db_exercise_set = models.ExerciseSet(
+                id=str(uuid.uuid4()),
+                exercise_name=set_data.exercise_name,
+                set_number=set_data.set_number,
+                reps=set_data.reps,
+                weight=set_data.weight,
+                weight_unit=set_data.weight_unit,
+                workout_id=db_workout.id # Link to the parent workout
+            )
+            db.add(db_exercise_set)
+
+    # 3. Commit the transaction
+    try:
+        db.commit()
+        db.refresh(db_workout) # Refresh to get all data
+        return db_workout
+    except Exception as e:
+        db.rollback()
+        print(f"Error creating manual workout: {e}")
+        raise e
+
+
+
 def create_reset_otp(db: Session, user: models.User, otp_code: str) -> models.PasswordResetOTP:
     # 1. Delete any existing OTPs for this user
     db.query(models.PasswordResetOTP).filter(

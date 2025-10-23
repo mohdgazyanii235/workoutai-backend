@@ -28,9 +28,6 @@ def get_workouts(
     )
     return workouts
 
-
-
-# GET a single workout detail
 @router.get("/{workout_id}", response_model=schemas.WorkoutDetail)
 def get_workout(
     workout_id: str,
@@ -90,3 +87,21 @@ def update_workout_endpoint(
     # The crud function already returns the refreshed workout object
     # Pydantic will automatically validate and serialize it based on WorkoutDetail
     return updated_workout
+
+
+@router.post("", response_model=schemas.WorkoutDetail)
+def create_workout_manual(
+    workout_data: schemas.WorkoutUpdate, # Use the same schema as the PUT endpoint
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    try:
+        new_workout = crud.create_manual_workout(
+            db=db,
+            workout_data=workout_data,
+            user_id=current_user.id
+        )
+        return new_workout
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create workout: {e}")
+# --- END OF NEW ENDPOINT ---
