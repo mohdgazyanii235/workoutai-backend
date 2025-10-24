@@ -60,7 +60,6 @@ class ExerciseSet(Base):
     workout = relationship("Workout", back_populates="sets")
 
 
-# --- ADD THIS NEW MODEL ---
 class PasswordResetOTP(Base):
     __tablename__ = 'password_reset_otps'
     id = Column(String, primary_key=True, index=True)
