@@ -1,11 +1,11 @@
 from sqlalchemy.orm import Session
 import uuid
 from . import models, schemas
-from .services.ai_service import WorkoutLog
+from .services.ai_service import VoiceLog
 from app.auth import auth_service
 from datetime import timezone, timedelta
 import datetime
-from typing import Optional
+from typing import Optional, List
 
 def get_user(db: Session, id: str):
     return db.query(models.User).filter(models.User.id == id).first()
@@ -140,16 +140,13 @@ def update_workout(
         print(f"Error updating workout: {e}") # Or use logger
         raise e # Re-raise the exception to be handled by the endpoint
 
-def create_workout_from_log(db: Session, log: WorkoutLog, user_id: str, created_at: Optional[datetime.datetime] = None) -> models.Workout:
-
-    workout_timestamp = created_at if created_at else datetime.datetime.now(datetime.timezone.utc)
-
+def create_workout_from_log(db: Session, log: VoiceLog, user_id: str, created_at: Optional[datetime.datetime] = None) -> models.Workout:
     db_workout = models.Workout(
         id=str(uuid.uuid4()),
         user_id=user_id,
         notes=log.note,
         workout_type=log.workout_type,
-        created_at=workout_timestamp
+        created_at=created_at
     )
     db.add(db_workout)
     db.commit()
@@ -169,6 +166,59 @@ def create_workout_from_log(db: Session, log: WorkoutLog, user_id: str, created_
 
     db.commit()
     return db_workout
+
+
+def manage_voice_log(db: Session, voice_log: VoiceLog, user_id: str, created_at: Optional[datetime.datetime] = None):
+    logging_timestamp = created_at if created_at else datetime.datetime.now(datetime.timezone.utc)
+    db_user = get_user(db, id=user_id)
+    entry_date = logging_timestamp.date() if logging_timestamp.date() else datetime.date.today()
+    date_str = entry_date.isoformat()
+    if not db_user:
+        print(f"User not found with ID: {user_id}")
+        return None
+
+    if voice_log.updated_weight:
+        print("User wants to update their weight")
+        update_history_tracked_field(db, db_user, voice_log.updated_weight, date_str, "weight")
+    
+    if voice_log.updated_bench_1rm:
+        print("User wants to update their bench 1rm")
+        update_history_tracked_field(db, db_user, voice_log.updated_bench_1rm, date_str, "bench_1rm")
+
+    if voice_log.updated_squat_1rm:
+        print("User wants to update their squat 1rm")
+        update_history_tracked_field(db, db_user, voice_log.updated_squat_1rm, date_str, "squat_1rm")
+
+    if voice_log.updated_deadlift_1rm:
+        print("User wants to update their deadlift 1rm")
+        update_history_tracked_field(db, db_user, voice_log.updated_deadlift_1rm, date_str, "deadlift_1rm")
+
+    if voice_log.updated_fat_percentage:
+        print("User wants to update their fat %")
+        update_history_tracked_field(db, db_user, voice_log.updated_fat_percentage, date_str, "fat_percentage")
+
+    if len(voice_log.sets) > 0:
+        print("user wants to log a workout")
+        create_workout_from_log(db, voice_log, user_id, logging_timestamp)
+
+    return voice_log.comment
+
+
+def update_history_tracked_field(db, db_user, updated_value: float, date_str: str, field_type: str):
+    new_entry = {"date": date_str, "value": updated_value}
+    current_history: List[dict] = getattr(db_user, field_type) or []
+    updated_history = current_history + [new_entry]
+    setattr(db_user, field_type, updated_history)
+    try:
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+    except Exception as e:
+        db.rollback()
+        print(f"Error committing update for user {db_user.id}: {e}")
+        raise e
+
 
 def delete_workout(db: Session, workout_id: str, user_id: str) -> models.Workout | None:
     # First, find the workout to ensure it exists and belongs to the user

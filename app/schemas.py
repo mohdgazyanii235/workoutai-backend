@@ -65,6 +65,10 @@ class WorkoutLogCreate(BaseModel):
     text: str
     created_at: Optional[datetime] = None
 
+class VoiceLog(BaseModel):
+    text: str
+    created_at: Optional[datetime] = None
+
 class WorkoutBase(BaseModel):
     id: str
     notes: Optional[str] = None
@@ -116,3 +120,7 @@ class ResetPasswordRequest(BaseModel):
     email: EmailStr
     otp: str = Field(..., min_length=6, max_length=6)
     new_password: str = Field(..., min_length=6)
+
+
+class AILogResponse(BaseModel):
+    comment: str
