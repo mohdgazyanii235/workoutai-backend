@@ -124,3 +124,12 @@ class ResetPasswordRequest(BaseModel):
 
 class AILogResponse(BaseModel):
     comment: str
+
+
+class Exercise(BaseModel):
+    id: str
+    exercise_name: str
+    workout_types: List[str]
+
+    class Config:
+        from_attributes = True

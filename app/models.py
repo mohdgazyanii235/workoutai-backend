@@ -68,3 +68,10 @@ class PasswordResetOTP(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False)
     
     user = relationship("User")
+
+class WorkoutTemplate(Base):
+    __tablename__ = 'workout_templates'
+    id = Column(String, primary_key=True, index=True)
+    template_name = Column(String, nullable=False, unique=True, index=True)
+    # Store list of exercise names directly
+    exercise_names = Column(JSON, nullable=False, default=list)
