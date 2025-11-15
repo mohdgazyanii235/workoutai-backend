@@ -27,3 +27,5 @@ eggs/
 
 # Installer logs
 pip-log.txt
+
+*.db

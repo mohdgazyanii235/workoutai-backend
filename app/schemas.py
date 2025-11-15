@@ -28,6 +28,9 @@ class UserUpdate(BaseModel):
     squat_1rm: Optional[List[HistoryEntry]] = None
     bench_1rm: Optional[List[HistoryEntry]] = None
 
+    bio: Optional[str] = None
+    profile_photo_url: Optional[str] = None
+
     goal_weight: Optional[float] = None
     goal_fat_percentage: Optional[float] = None
     goal_deadlift_1rm: Optional[float] = None
@@ -45,6 +48,8 @@ class User(UserBase):
     weight: List[HistoryEntry] = []
     height: Optional[float] = None
     is_onboarded: bool
+    bio: Optional[str] = None
+    profile_photo_url: Optional[str] = None
     fat_percentage: List[HistoryEntry] = []
     deadlift_1rm: List[HistoryEntry] = []
     squat_1rm: List[HistoryEntry] = []
@@ -130,6 +135,15 @@ class Exercise(BaseModel):
     id: str
     exercise_name: str
     workout_types: List[str]
+
+    class Config:
+        from_attributes = True
+
+
+class WorkoutTemplate(BaseModel):
+    id: str
+    template_name: str
+    exercise_names: List[str]
 
     class Config:
         from_attributes = True

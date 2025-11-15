@@ -19,6 +19,9 @@ class User(Base):
     city = Column(String, nullable=True)
     country = Column(String, nullable=True)
 
+    bio = Column(String, nullable=True)
+    profile_photo_url = Column(String, nullable=True)
+
     # Strenght Information
     weight = Column(JSON, default=list, nullable=True)
     height = Column(Float, nullable=True)
