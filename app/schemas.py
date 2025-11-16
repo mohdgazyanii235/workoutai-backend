@@ -1,7 +1,8 @@
 # app/schemas.py
 from pydantic import BaseModel, Field, EmailStr
 from datetime import date, datetime
-from typing import Optional, List
+# --- MODIFIED: Import `Optional` and `List` from `typing` ---
+from typing import Optional, List, Union
 
 class HistoryEntry(BaseModel):
     date: date
@@ -96,22 +97,55 @@ class ExerciseSet(BaseModel):
     class Config:
         from_attributes = True
 
+# --- NEW: CardioSession Schema (for reading) ---
+class CardioSession(BaseModel):
+    id: str
+    name: str
+    duration_minutes: Optional[float] = None
+    distance: Optional[float] = None
+    distance_unit: Optional[str] = None
+    speed: Optional[float] = None
+    pace: Optional[str] = None
+    laps: Optional[int] = None
+    
+    class Config:
+        from_attributes = True
+
+
 class WorkoutDetail(WorkoutBase):
     user_id: str
     sets: list[ExerciseSet] = []
+    # --- NEW: Add cardio_sessions to the detail view ---
+    cardio_sessions: list[CardioSession] = []
 
 class ExerciseSetUpdate(BaseModel):
-    id: Optional[str] = None
+    # --- MODIFIED: Explicitly allow None as a value ---
+    id: str | None = None
     exercise_name: str
     set_number: int
     reps: int
     weight: float
     weight_unit: str
 
+# --- NEW: CardioSessionUpdate Schema (for create/update) ---
+class CardioSessionUpdate(BaseModel):
+    # --- MODIFIED: Explicitly allow None as a value ---
+    id: str | None = None
+    name: str
+    duration_minutes: Optional[float] = None
+    distance: Optional[float] = None
+    distance_unit: Optional[str] = None
+    speed: Optional[float] = None
+    pace: Optional[str] = None
+    laps: Optional[int] = None
+
+
 class WorkoutUpdate(BaseModel):
     notes: Optional[str] = None
     workout_type: Optional[str] = None
     sets: Optional[List[ExerciseSetUpdate]] = None
+    # --- MODIFIED: Add cardio_sessions to the update payload ---
+    cardio_sessions: Optional[List[CardioSessionUpdate]] = None
 
 
 class ForgotPasswordRequest(BaseModel):

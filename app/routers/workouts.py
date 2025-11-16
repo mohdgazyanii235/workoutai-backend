@@ -95,7 +95,9 @@ def create_workout_manual(
     current_user: Annotated[schemas.User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
+    print("trying to create manual workout")
     try:
+        
         new_workout = crud.create_manual_workout(
             db=db,
             workout_data=workout_data,
@@ -104,4 +106,4 @@ def create_workout_manual(
         return new_workout
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create workout: {e}")
-# --- END OF NEW ENDPOINT ---
+

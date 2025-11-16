@@ -49,7 +49,16 @@ class Workout(Base):
     workout_type = Column(String, nullable=True)
     user_id = Column(String, ForeignKey('users.id'))
     user = relationship("User", back_populates="workouts")
-    sets = relationship("ExerciseSet", back_populates="workout")
+    sets = relationship(
+        "ExerciseSet", 
+        back_populates="workout", 
+        cascade="all, delete-orphan"
+    )
+    cardio_sessions = relationship(
+        "CardioSession", 
+        back_populates="workout", 
+        cascade="all, delete-orphan"
+    )
 
 class ExerciseSet(Base):
     __tablename__ = 'exercise_sets'
@@ -61,6 +70,25 @@ class ExerciseSet(Base):
     weight_unit = Column(String, default='kg')
     workout_id = Column(String, ForeignKey('workouts.id'))
     workout = relationship("Workout", back_populates="sets")
+
+
+class CardioSession(Base):
+    __tablename__ = 'cardio_sessions'
+    id = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=False) # e.g., "Running", "Rowing"
+    
+    # We will store duration in minutes for consistency
+    duration_minutes = Column(Float, nullable=True) 
+    
+    distance = Column(Float, nullable=True)
+    distance_unit = Column(String, nullable=True) # e.g., "km", "miles"
+    
+    speed = Column(Float, nullable=True)
+    pace = Column(String, nullable=True) # e.g., "5:30 min/km"
+    laps = Column(Integer, nullable=True)
+    
+    workout_id = Column(String, ForeignKey('workouts.id'))
+    workout = relationship("Workout", back_populates="cardio_sessions")
 
 
 class PasswordResetOTP(Base):

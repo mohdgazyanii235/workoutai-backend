@@ -66,6 +66,7 @@ def update_user_profile(db: Session, user_id: str, update: schemas.UserUpdate):
     return db_user
 
 
+# --- THIS FUNCTION WAS MISSING FROM YOUR LAST FILE ---
 def update_workout(
     db: Session,
     workout_id: str,
@@ -89,7 +90,6 @@ def update_workout(
     if "workout_type" in update_data:
         db_workout.workout_type = update_data["workout_type"]
 
-    # Mark the workout object as modified in the session
     db.add(db_workout)
 
     # 2. Handle Exercise Sets update if 'sets' field is present in the request
@@ -122,14 +122,50 @@ def update_workout(
                     workout_id=db_workout.id # Link to the parent workout
                 )
                 db.add(db_new_set)
-                # No need to add to incoming_set_ids as new sets don't exist in current_sets_db
-            # else: (Case where ID is provided but doesn't exist - ignore or raise error if needed)
-            #    pass
 
         # --- DELETE sets that are in the DB but were NOT in the incoming payload ---
         set_ids_to_delete = current_sets_db.keys() - incoming_set_ids
         for set_id in set_ids_to_delete:
             db.delete(current_sets_db[set_id])
+
+    # --- NEW: Handle Cardio Sessions update ---
+    if workout_update.cardio_sessions is not None:
+        current_cardio_db = {c.id: c for c in db_workout.cardio_sessions}
+        incoming_cardio_ids = set()
+
+        for cardio_data in workout_update.cardio_sessions:
+            if cardio_data.id and cardio_data.id in current_cardio_db:
+                # --- UPDATE existing cardio session ---
+                db_cardio = current_cardio_db[cardio_data.id]
+                db_cardio.name = cardio_data.name
+                db_cardio.duration_minutes = cardio_data.duration_minutes
+                db_cardio.distance = cardio_data.distance
+                db_cardio.distance_unit = cardio_data.distance_unit
+                db_cardio.speed = cardio_data.speed
+                db_cardio.pace = cardio_data.pace
+                db_cardio.laps = cardio_data.laps
+                db.add(db_cardio)
+                incoming_cardio_ids.add(cardio_data.id)
+            elif not cardio_data.id:
+                # --- CREATE new cardio session ---
+                db_new_cardio = models.CardioSession(
+                    id=str(uuid.uuid4()),
+                    name=cardio_data.name,
+                    duration_minutes=cardio_data.duration_minutes,
+                    distance=cardio_data.distance,
+                    distance_unit=cardio_data.distance_unit,
+                    speed=cardio_data.speed,
+                    pace=cardio_data.pace,
+                    laps=cardio_data.laps,
+                    workout_id=db_workout.id
+                )
+                db.add(db_new_cardio)
+
+        # --- DELETE cardio sessions not in the payload ---
+        cardio_ids_to_delete = current_cardio_db.keys() - incoming_cardio_ids
+        for cardio_id in cardio_ids_to_delete:
+            db.delete(current_cardio_db[cardio_id])
+
 
     try:
         db.commit()
@@ -140,6 +176,7 @@ def update_workout(
         print(f"Error updating workout: {e}") # Or use logger
         raise e # Re-raise the exception to be handled by the endpoint
 
+# --- THIS FUNCTION WAS MISSING ---
 def create_workout_from_log(db: Session, log: VoiceLog, user_id: str, created_at: Optional[datetime.datetime] = None) -> models.Workout:
     db_workout = models.Workout(
         id=str(uuid.uuid4()),
@@ -149,25 +186,55 @@ def create_workout_from_log(db: Session, log: VoiceLog, user_id: str, created_at
         created_at=created_at
     )
     db.add(db_workout)
-    db.commit()
-    db.refresh(db_workout)
+    
+    # Commit workout first to get its ID
+    try:
+        db.commit()
+        db.refresh(db_workout)
+    except Exception as e:
+        db.rollback()
+        print(f"Error creating parent workout from log: {e}")
+        raise e
 
-    for i, ai_set in enumerate(log.sets):
-        db_exercise_set = models.ExerciseSet(
-            id=str(uuid.uuid4()),
-            exercise_name=ai_set.exercise_name,
-            set_number=ai_set.sets,
-            reps=ai_set.reps,
-            weight=ai_set.weight,
-            weight_unit=ai_set.weight_unit,
-            workout_id=db_workout.id
-        )
-        db.add(db_exercise_set)
+    if log.sets:
+        for i, ai_set in enumerate(log.sets):
+            db_exercise_set = models.ExerciseSet(
+                id=str(uuid.uuid4()),
+                exercise_name=ai_set.exercise_name,
+                set_number=ai_set.sets,
+                reps=ai_set.reps,
+                weight=ai_set.weight,
+                weight_unit=ai_set.weight_unit,
+                workout_id=db_workout.id
+            )
+            db.add(db_exercise_set)
 
-    db.commit()
+    if log.cardio:
+        for ai_cardio in log.cardio:
+            db_cardio_session = models.CardioSession(
+                id=str(uuid.uuid4()),
+                name=ai_cardio.exercise_name,
+                duration_minutes=ai_cardio.duration_minutes,
+                speed=ai_cardio.speed,
+                pace=ai_cardio.pace,
+                distance=ai_cardio.distance,
+                distance_unit=ai_cardio.distance_unit,
+                laps=ai_cardio.laps,
+                workout_id=db_workout.id
+            )
+            db.add(db_cardio_session)
+
+    try:
+        db.commit()
+        db.refresh(db_workout)
+    except Exception as e:
+        db.rollback()
+        print(f"Error creating workout children from log: {e}")
+        raise e
+        
     return db_workout
 
-
+# --- THIS FUNCTION WAS MISSING ---
 def manage_voice_log(db: Session, voice_log: VoiceLog, user_id: str, created_at: Optional[datetime.datetime] = None):
     logging_timestamp = created_at if created_at else datetime.datetime.now(datetime.timezone.utc)
     db_user = get_user(db, id=user_id)
@@ -197,13 +264,14 @@ def manage_voice_log(db: Session, voice_log: VoiceLog, user_id: str, created_at:
         print("User wants to update their fat %")
         update_history_tracked_field(db, db_user, voice_log.updated_fat_percentage, date_str, "fat_percentage")
 
-    if len(voice_log.sets) > 0:
-        print("user wants to log a workout")
+    # MODIFIED: Check for sets OR cardio
+    if (voice_log.sets and len(voice_log.sets) > 0) or (voice_log.cardio and len(voice_log.cardio) > 0):
+        print("user wants to log a workout or cardio")
         create_workout_from_log(db, voice_log, user_id, logging_timestamp)
 
     return voice_log.comment
 
-
+# --- THIS FUNCTION WAS MISSING ---
 def update_history_tracked_field(db, db_user, updated_value: float, date_str: str, field_type: str):
     new_entry = {"date": date_str, "value": updated_value}
     current_history: List[dict] = getattr(db_user, field_type) or []
@@ -234,16 +302,12 @@ def delete_workout(db: Session, workout_id: str, user_id: str) -> models.Workout
     if not db_workout:
         return None  # Workout not found or doesn't belong to user
 
-    # 1. Delete all child exercise sets linked to this workout
-    # We do this first to satisfy the foreign key constraint
-    db.query(models.ExerciseSet).filter(
-        models.ExerciseSet.workout_id == workout_id
-    ).delete(synchronize_session=False)
-
-    # 2. Now, delete the workout itself
+    # 1. Delete the workout itself.
+    # SQLAlchemy will handle deleting child ExerciseSets and CardioSessions
+    # because we added `cascade="all, delete-orphan"` to the relationships.
     db.delete(db_workout)
     
-    # 3. Commit the transaction
+    # 2. Commit the transaction
     db.commit()
     
     return db_workout
@@ -260,6 +324,16 @@ def create_manual_workout(db: Session, workout_data: schemas.WorkoutUpdate, user
     )
     db.add(db_workout)
     
+    # --- MODIFICATION: Commit the parent workout FIRST to get its ID ---
+    try:
+        db.commit()
+        db.refresh(db_workout)
+    except Exception as e:
+        db.rollback()
+        print(f"Error creating parent workout: {e}")
+        raise e
+    # -----------------------------------------------------------------
+
     # 2. Create the child ExerciseSets
     if workout_data.sets:
         for set_data in workout_data.sets:
@@ -274,14 +348,30 @@ def create_manual_workout(db: Session, workout_data: schemas.WorkoutUpdate, user
             )
             db.add(db_exercise_set)
 
-    # 3. Commit the transaction
+    # --- NEW: Create the child CardioSessions ---
+    if workout_data.cardio_sessions:
+        for cardio_data in workout_data.cardio_sessions:
+            db_cardio_session = models.CardioSession(
+                id=str(uuid.uuid4()),
+                name=cardio_data.name,
+                duration_minutes=cardio_data.duration_minutes,
+                distance=cardio_data.distance,
+                distance_unit=cardio_data.distance_unit,
+                speed=cardio_data.speed,
+                pace=cardio_data.pace,
+                laps=cardio_data.laps,
+                workout_id=db_workout.id
+            )
+            db.add(db_cardio_session)
+
+    # 3. Commit the transaction (for children)
     try:
         db.commit()
         db.refresh(db_workout) # Refresh to get all data
         return db_workout
     except Exception as e:
         db.rollback()
-        print(f"Error creating manual workout: {e}")
+        print(f"Error creating manual workout children: {e}") # Modified log
         raise e
 
 
