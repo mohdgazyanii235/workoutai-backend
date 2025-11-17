@@ -106,6 +106,7 @@ class CardioSession(BaseModel):
     distance_unit: Optional[str] = None
     speed: Optional[float] = None
     pace: Optional[str] = None
+    pace_unit: Optional[str] = None
     laps: Optional[int] = None
     
     class Config:
@@ -137,6 +138,7 @@ class CardioSessionUpdate(BaseModel):
     distance_unit: Optional[str] = None
     speed: Optional[float] = None
     pace: Optional[str] = None
+    pace_unit: Optional[str] = None
     laps: Optional[int] = None
 
 

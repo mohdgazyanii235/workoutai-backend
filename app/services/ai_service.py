@@ -28,12 +28,12 @@ class ExerciseSet(BaseModel):
 class CardioLog(BaseModel):
     exercise_name: str = Field(description="The name of the cardio exercise, e.g., 'Running', 'Rowing'")
     duration_minutes: Optional[float] = Field(description="The duration of the exercise in minutes. e.g., '20 min' becomes 20.0")
-    speed: Optional[float] = Field(description="The speed, e.g., 10 (unit inferred as km/h or mph).")
-    pace: Optional[str] = Field(description="The pace, e.g., '5:30 min/km'.")
+    speed: Optional[float] = Field(description="The speed, e.g., 10")
+    pace: Optional[str] = Field(description="The pace, e.g., '5:30', '8:10'.")
+    pace_unit: Optional[str] = Field(description="The unit of measurement for pace, this can either be Min/Mile or Min/KM")
     distance: Optional[float] = Field(description="The distance.")
-    distance_unit: Optional[str] = Field(description="The unit of distance, e.g., 'km', 'miles'.")
+    distance_unit: Optional[str] = Field(description="The unit of distance, this can either be Kilometer(s) or Mile(s)")
     laps: Optional[int] = Field(description="The number of laps.")
-
 
 class VoiceLog(BaseModel):
     cardio: List[CardioLog] = Field(description="A list of all cardio exercises in the workout.")
@@ -50,7 +50,6 @@ class VoiceLog(BaseModel):
     updated_deadlift_1rm_unit: str = Field(description="The unit of the users updated deadlift 1rm.")
     updated_fat_percentage: float | None = Field(description="The users fat percentage.")
     comment: str = Field(description="This is the AIs comment on the users log.")
-
 
 # Initialize the OpenAI model
 llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2)
@@ -85,6 +84,7 @@ def structured_log_text(text: str) -> VoiceLog:
                 "duration_minutes": 20.0,
                 "speed": null,
                 "pace": null,
+                "pace_unit": null, // this can either be null, Min/KM or Min/Mile
                 "distance": 1.0,
                 "distance_unit": "mile",
                 "laps": null
@@ -146,7 +146,8 @@ def structured_log_text(text: str) -> VoiceLog:
     - If a user does a body weight exercise, parse the weight to be 0 and unit to be 'kg'.
     - If the user ever fails to specify the unit for weight, always default the 'weight_unit' value to 'kg'.
     - "comment" field is for you to write a sentence as a response to the users log, make sure this is motivating and always ends with something like 'your new weight is tracked' or 'you workout has been logged', be logical and creative!
-    
+    - "note" field is for you to write a simple workout summary with motivating text and some key pointers from the workout! Something the user can remember.
+
     Now parse the following users description:
     "{user_text}"
 

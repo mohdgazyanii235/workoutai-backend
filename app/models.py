@@ -80,11 +80,12 @@ class CardioSession(Base):
     # We will store duration in minutes for consistency
     duration_minutes = Column(Float, nullable=True) 
     
-    distance = Column(Float, nullable=True)
+    distance = Column(Float, nullable=True) 
     distance_unit = Column(String, nullable=True) # e.g., "km", "miles"
     
     speed = Column(Float, nullable=True)
-    pace = Column(String, nullable=True) # e.g., "5:30 min/km"
+    pace = Column(String, nullable=True)
+    pace_unit = Column(String, nullable=True) # e.g., "Min/KM", "Min/Mile"
     laps = Column(Integer, nullable=True)
     
     workout_id = Column(String, ForeignKey('workouts.id'))
