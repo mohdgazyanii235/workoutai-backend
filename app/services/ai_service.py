@@ -137,13 +137,15 @@ def structured_log_text(text: str) -> VoiceLog:
 
     Notice above how when the user only updated their weight every other irrelevant field was left null or empty!
     It is important for you to provide all the fields that I have listed but I just want you to keep them equal to null or empty lists/strings.
+    Also, it is very important to make sure that the 'workout_type' field is populated. This should be a generic and should be a good description of the workout regardless of what the user trained.
+
     
     - "duration_minutes" should be a float (e.g., "20 min" -> 20.0).
     - "distance_unit" should be "km", "miles", "meters", or null.
     - If a user specifies duration, extract it to "duration_minutes".
     - If a user does a body weight exercise, parse the weight to be 0 and unit to be 'kg'.
     - If the user ever fails to specify the unit for weight, always default the 'weight_unit' value to 'kg'.
-    - "comment" field is for you to write a very small sentence as a response to the users log!
+    - "comment" field is for you to write a sentence as a response to the users log, make sure this is motivating and always ends with something like 'your new weight is tracked' or 'you workout has been logged', be logical and creative!
     
     Now parse the following users description:
     "{user_text}"
