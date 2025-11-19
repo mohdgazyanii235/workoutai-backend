@@ -1,7 +1,7 @@
 # app/main.py
 from fastapi import FastAPI
-from app import models
-from app.database import engine
+from app import models, crud # Added crud import
+from app.database import engine, SessionLocal # Added SessionLocal import
 from app.routers import log, auth, users, workouts, templates
 import time # <-- Import time
 from fastapi import FastAPI, Request # <-- Import Request
@@ -12,6 +12,7 @@ import uvicorn
 from starlette.middleware.sessions import SessionMiddleware
 import logging
 import sys
+from app.auth import auth_service # Added auth_service import
 
 
 load_dotenv()
@@ -63,6 +64,26 @@ async def log_requests(request: Request, call_next):
         except Exception as e:
             request_body_log = {"error": f"Failed to read request body: {e}"}
 
+    # --- NEW: Log user activity to DB if authenticated ---
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        try:
+            token = auth_header.split(" ")[1]
+            payload = auth_service.decode_token(token)
+            user_id = payload.get("sub")
+            
+            if user_id:
+                # Create a new DB session just for this logging operation
+                db = SessionLocal()
+                try:
+                    crud.log_app_metric(db, user_id)
+                finally:
+                    db.close()
+        except Exception as e:
+            # Don't block the request if logging fails, just log the error
+            logger.error(f"Failed to log app metric: {e}")
+    # -----------------------------------------------------
+
     response = await call_next(request)
     process_time = time.time() - start_time
     
@@ -87,4 +108,3 @@ def read_root():
     return {"message": "Nice try :)"}
 
 logger.info("Application setup complete.")
-

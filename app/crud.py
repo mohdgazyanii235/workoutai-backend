@@ -442,3 +442,33 @@ def create_template(db: Session, template_name: str, exercise_names: List[str]) 
     db.commit()
     db.refresh(db_template)
     return db_template
+
+def log_app_metric(db: Session, user_id: str):
+    try:
+        # Try to find an existing record for this user
+        metric = db.query(models.AppMetric).filter(models.AppMetric.user_id == user_id).first()
+        
+        if metric:
+            # Update existing record
+            metric.last_app_query = datetime.datetime.utcnow()
+            # --- NEW: Increment counter ---
+            metric.total_api_calls += 1
+        else:
+            # Create new record
+            metric = models.AppMetric(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                last_app_query=datetime.datetime.utcnow(),
+                # --- NEW: Initialize counter ---
+                total_api_calls=1 
+            )
+            db.add(metric)
+        
+        db.commit()
+        db.refresh(metric)
+        return metric
+    except Exception as e:
+        db.rollback()
+        print(f"Error logging app metric for user {user_id}: {e}")
+        # Do not raise, we don't want metrics logging to break the request
+        return None

@@ -39,6 +39,7 @@ class User(Base):
 
     is_onboarded = Column(Boolean, nullable=False, default=False)
     workouts = relationship("Workout", back_populates="user")
+    app_metric = relationship("AppMetric", back_populates="user", uselist=False)
     
 
 class Workout(Base):
@@ -107,3 +108,12 @@ class WorkoutTemplate(Base):
     template_name = Column(String, nullable=False, unique=True, index=True)
     # Store list of exercise names directly
     exercise_names = Column(JSON, nullable=False, default=list)
+
+
+class AppMetric(Base):
+    __tablename__ = 'app_metrics'
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey('users.id'), unique=True, nullable=False)
+    last_app_query = Column(DateTime, default=datetime.datetime.utcnow)
+    total_api_calls = Column(Integer, default=0, nullable=False)
+    user = relationship("User", back_populates="app_metric")
