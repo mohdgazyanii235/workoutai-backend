@@ -114,7 +114,7 @@ def structured_log_text(text: str) -> VoiceLog:
                 "duration_minutes": 20.0,
                 "speed": null,
                 "pace": null,
-                "pace_unit": null,
+                "pace_unit": null, // This can be null, Min/Mile or Min/Km but default is Min/Km..if the user provides pace use default.
                 "distance": 1.0,
                 "distance_unit": "mile",
                 "laps": null
@@ -183,7 +183,8 @@ def structured_log_text(text: str) -> VoiceLog:
     -   If the user does a body weight exercise, parse the weight to be 0 and unit to be 'kg'.
     -   If the user ever fails to specify the unit for weight, always default the 'weight_unit' value to 'kg'.
     -   "comment" field is for you to write a single, motivating sentence as a response to the users log.
-    -   "note" field is for you to write a simple workout summary with motivating text.
+    -   "note" field is for you to write a simple workout summary with motivating text and a simple summary of the workout.
+    -   Remember, if a user has logged a workout, or a cardio session, the workout_type field is mandatory this should be the name of the workout, like chest, cardio, running etc.
     -   If the user only updates a metric (like weight), leave `cardio`, `sets`, `note`, and `workout_type` as empty lists or strings.
 
     Now parse the following users description:
