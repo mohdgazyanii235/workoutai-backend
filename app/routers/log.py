@@ -40,9 +40,11 @@ def voice_log(
         structured_data = ai_service.structured_log_text(raw_text)
 
         if structured_data:
+            crud.log_open_ai_query(db, user_id=current_user.id)
             return schemas.AILogResponse(comment=crud.manage_voice_log(db, structured_data, user_id=current_user.id, created_at=log.created_at))
 
         print(structured_data)
+        
         return current_user.id
     except InvalidWorkoutException as e:
         raise HTTPException(status_code=400, detail=str(e))

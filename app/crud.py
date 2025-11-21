@@ -235,7 +235,7 @@ def create_workout_from_log(db: Session, log: VoiceLog, user_id: str, created_at
         
     return db_workout
 
-# --- THIS FUNCTION WAS MISSING ---
+
 def manage_voice_log(db: Session, voice_log: VoiceLog, user_id: str, created_at: Optional[datetime.datetime] = None):
     logging_timestamp = created_at if created_at else datetime.datetime.now(datetime.timezone.utc)
     db_user = get_user(db, id=user_id)
@@ -269,6 +269,10 @@ def manage_voice_log(db: Session, voice_log: VoiceLog, user_id: str, created_at:
     if (voice_log.sets and len(voice_log.sets) > 0) or (voice_log.cardio and len(voice_log.cardio) > 0):
         print("user wants to log a workout or cardio")
         create_workout_from_log(db, voice_log, user_id, logging_timestamp)
+
+    if not voice_log.updated_weight or not voice_log.updated_bench_1rm or not voice_log.updated_squat_1rm or not voice_log.updated_deadlift_1rm or not voice_log.updated_fat_percentage or not ((voice_log.sets and len(voice_log.sets) > 0) or (voice_log.cardio and len(voice_log.cardio) > 0)):
+        log_rubbish_voice_log(db, user_id=user_id)
+    
 
     return voice_log.comment
 
@@ -474,6 +478,46 @@ def log_app_metric(db: Session, user_id: str):
         # Do not raise, we don't want metrics logging to break the request
         return None
     
+
+def log_rubbish_voice_log(db: Session, user_id: str):
+    try:
+        # Try to find an existing record for this user
+        metric = db.query(models.AppMetric).filter(models.AppMetric.user_id == user_id).first()
+        
+        if metric.rubbish_voice_logs:
+            metric.rubbish_voice_logs += 1
+        else:
+            metric.rubbish_voice_logs = 1
+        
+        db.commit()
+        db.refresh(metric)
+        return metric
+    except Exception as e:
+        db.rollback()
+        print(f"Error logging app metric for user {user_id}: {e}")
+        # Do not raise, we don't want metrics logging to break the request
+        return None
+
+def log_open_ai_query(db: Session, user_id: str):
+    print("adding to log metric")
+    try:
+        # Try to find an existing record for this user
+        metric = db.query(models.AppMetric).filter(models.AppMetric.user_id == user_id).first()
+        
+        if metric.open_ai_calls:
+            metric.open_ai_calls +=1
+        else:
+            metric.open_ai_calls = 1
+        
+        db.commit()
+        db.refresh(metric)
+        return metric
+    except Exception as e:
+        db.rollback()
+        print(f"Error logging app metric for user {user_id}: {e}")
+        # Do not raise, we don't want metrics logging to break the request
+        return None
+
 
 def get_friendship_status(db: Session, user_a: str, user_b: str) -> str:
     """

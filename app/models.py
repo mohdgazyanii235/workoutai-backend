@@ -123,5 +123,7 @@ class AppMetric(Base):
     id = Column(String, primary_key=True, index=True)
     user_id = Column(String, ForeignKey('users.id'), unique=True, nullable=False)
     last_app_query = Column(DateTime, default=datetime.datetime.utcnow)
-    total_api_calls = Column(Integer, default=0, nullable=False)
+    total_api_calls = Column(Integer, default=0, nullable=True)
     user = relationship("User", back_populates="app_metric")
+    open_ai_calls = Column(Integer, default=0, nullable=True)
+    rubbish_voice_logs = Column(Integer, default=0, nullable=True)
