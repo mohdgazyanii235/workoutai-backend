@@ -5,6 +5,15 @@ from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 from .database import Base
 
+class Friendship(Base):
+    __tablename__ = 'friendships'
+    
+    id = Column(String, primary_key=True, index=True)
+    requester_id = Column(String, ForeignKey('users.id'), nullable=False)
+    addressee_id = Column(String, ForeignKey('users.id'), nullable=False)
+    status = Column(String, default="pending", nullable=False) # "pending", "accepted", "blocked"
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
 class User(Base):
     __tablename__ = 'users'
     id = Column(String, primary_key=True, index=True)
@@ -40,7 +49,6 @@ class User(Base):
     is_onboarded = Column(Boolean, nullable=False, default=False)
     workouts = relationship("Workout", back_populates="user")
     app_metric = relationship("AppMetric", back_populates="user", uselist=False)
-    
 
 class Workout(Base):
     __tablename__ = 'workouts'

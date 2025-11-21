@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_
 import uuid
 from . import models, schemas
 from .services.ai_service import VoiceLog
@@ -472,3 +473,139 @@ def log_app_metric(db: Session, user_id: str):
         print(f"Error logging app metric for user {user_id}: {e}")
         # Do not raise, we don't want metrics logging to break the request
         return None
+    
+
+def get_friendship_status(db: Session, user_a: str, user_b: str) -> str:
+    """
+    Returns: 'none', 'pending_sent', 'pending_received', 'accepted'
+    """
+    # Check if A sent to B
+    sent = db.query(models.Friendship).filter(
+        models.Friendship.requester_id == user_a,
+        models.Friendship.addressee_id == user_b
+    ).first()
+    
+    if sent:
+        if sent.status == 'accepted': return 'accepted'
+        return 'pending_sent'
+        
+    # Check if B sent to A
+    received = db.query(models.Friendship).filter(
+        models.Friendship.requester_id == user_b,
+        models.Friendship.addressee_id == user_a
+    ).first()
+    
+    if received:
+        if received.status == 'accepted': return 'accepted'
+        return 'pending_received'
+        
+    return 'none'
+
+def send_friend_request(db: Session, requester_id: str, addressee_id: str):
+    # Check existing
+    existing = db.query(models.Friendship).filter(
+        or_(
+            and_(models.Friendship.requester_id == requester_id, models.Friendship.addressee_id == addressee_id),
+            and_(models.Friendship.requester_id == addressee_id, models.Friendship.addressee_id == requester_id)
+        )
+    ).first()
+    
+    if existing:
+        if existing.status == 'accepted':
+            return existing # Already friends
+        # If pending, logic can vary (e.g. auto-accept if mutual), for now just return
+        return existing
+
+    friendship = models.Friendship(
+        id=str(uuid.uuid4()),
+        requester_id=requester_id,
+        addressee_id=addressee_id,
+        status="pending"
+    )
+    db.add(friendship)
+    db.commit()
+    db.refresh(friendship)
+    return friendship
+
+
+def respond_to_friend_request(db: Session, user_id: str, friendship_id: str, action: str):
+    # User must be the addressee to accept
+    friendship = db.query(models.Friendship).filter(models.Friendship.id == friendship_id).first()
+    
+    if not friendship:
+        return None
+        
+    if friendship.addressee_id != user_id:
+        return None # Unauthorized
+        
+    if action == 'accept':
+        friendship.status = 'accepted'
+    elif action == 'reject':
+        db.delete(friendship) # Or set to 'rejected'
+        
+    db.commit()
+    return friendship
+
+def get_friends(db: Session, user_id: str):
+    """Get all accepted friendships"""
+    # Query friendships where user is either requester or addressee AND status is accepted
+    friendships = db.query(models.Friendship).filter(
+        and_(
+            or_(models.Friendship.requester_id == user_id, models.Friendship.addressee_id == user_id),
+            models.Friendship.status == 'accepted'
+        )
+    ).all()
+    
+    friend_ids = []
+    for f in friendships:
+        if f.requester_id == user_id:
+            friend_ids.append(f.addressee_id)
+        else:
+            friend_ids.append(f.requester_id)
+            
+    return db.query(models.User).filter(models.User.id.in_(friend_ids)).all()
+
+def search_users(db: Session, query: str, current_user_id: str):
+    """Search users by name/email, excluding self"""
+    search = f"%{query}%"
+    return db.query(models.User).filter(
+        and_(
+            models.User.id != current_user_id,
+            or_(
+                models.User.first_name.ilike(search),
+                models.User.last_name.ilike(search),
+                models.User.email.ilike(search)
+            )
+        )
+    ).limit(20).all()
+
+def calculate_consistency_score(workouts: list) -> float:
+    # Simplified version of what you had in frontend
+    if not workouts:
+        return 0.0
+    
+    if len(workouts) == 1:
+        return 100.0
+        
+    # Ensure we are working with valid dates
+    valid_workouts = [w for w in workouts if w.created_at]
+    if not valid_workouts:
+        return 0.0
+
+    sorted_dates = sorted([w.created_at for w in valid_workouts])
+    
+    # Get unique workout days
+    unique_days = set(d.date() for d in sorted_dates)
+    if len(unique_days) < 2:
+        return 100.0
+        
+    # Calculate gaps
+    total_days = (sorted_dates[-1] - sorted_dates[0]).days
+    if total_days == 0: return 100.0
+    
+    # FIX: Use offset-aware UTC time for comparison
+    thirty_days_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+    
+    recent_workouts = [w for w in valid_workouts if w.created_at >= thirty_days_ago]
+    score = min(len(recent_workouts) * 8, 100) # 12 workouts a month = ~100%
+    return float(score)

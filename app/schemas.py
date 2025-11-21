@@ -1,7 +1,6 @@
 # app/schemas.py
 from pydantic import BaseModel, Field, EmailStr
 from datetime import date, datetime
-# --- MODIFIED: Import `Optional` and `List` from `typing` ---
 from typing import Optional, List, Union
 
 class HistoryEntry(BaseModel):
@@ -40,6 +39,7 @@ class UserUpdate(BaseModel):
 
 
 class User(UserBase):
+    # ... existing fields ...
     id: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -60,6 +60,11 @@ class User(UserBase):
     goal_deadlift_1rm: Optional[float] = None
     goal_squat_1rm: Optional[float] = None
     goal_bench_1rm: Optional[float] = None
+    created_at: datetime
+    
+    total_workouts: int = 0
+    consistency_score: float = 0.0
+    
     class Config:
         from_attributes = True
 
@@ -181,5 +186,44 @@ class WorkoutTemplate(BaseModel):
     template_name: str
     exercise_names: List[str]
 
+    class Config:
+        from_attributes = True
+
+
+class PublicUser(BaseModel):
+    id: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    bio: Optional[str] = None
+    created_at: datetime
+    profile_photo_url: Optional[str] = None
+    
+    # Only expose latest stats, not full history
+    current_bench_1rm: Optional[float] = None
+    current_squat_1rm: Optional[float] = None
+    current_deadlift_1rm: Optional[float] = None
+    
+    # Computed fields
+    consistency_score: Optional[float] = None
+    total_workouts: Optional[int] = None
+    is_friend: bool = False # "pending", "accepted", "none" or boolean if simple
+    friendship_status: str = "none" # none, pending_sent, pending_received, accepted
+
+
+class FriendRequestCreate(BaseModel):
+    target_user_id: str
+
+class FriendRequestAction(BaseModel):
+    action: str # "accept", "reject"
+
+class FriendshipResponse(BaseModel):
+    id: str
+    requester_id: str
+    addressee_id: str
+    status: str
+    created_at: datetime
+    
     class Config:
         from_attributes = True
