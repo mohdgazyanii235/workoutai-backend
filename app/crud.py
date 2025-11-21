@@ -270,7 +270,7 @@ def manage_voice_log(db: Session, voice_log: VoiceLog, user_id: str, created_at:
         print("user wants to log a workout or cardio")
         create_workout_from_log(db, voice_log, user_id, logging_timestamp)
 
-    if not voice_log.updated_weight or not voice_log.updated_bench_1rm or not voice_log.updated_squat_1rm or not voice_log.updated_deadlift_1rm or not voice_log.updated_fat_percentage or not ((voice_log.sets and len(voice_log.sets) > 0) or (voice_log.cardio and len(voice_log.cardio) > 0)):
+    if not voice_log.updated_weight and not voice_log.updated_bench_1rm and not voice_log.updated_squat_1rm and not voice_log.updated_deadlift_1rm and not voice_log.updated_fat_percentage and not ((voice_log.sets and len(voice_log.sets) > 0) or (voice_log.cardio and len(voice_log.cardio) > 0)):
         log_rubbish_voice_log(db, user_id=user_id)
     
 
