@@ -276,7 +276,6 @@ def manage_voice_log(db: Session, voice_log: VoiceLog, user_id: str, created_at:
 
     return voice_log.comment
 
-# --- THIS FUNCTION WAS MISSING ---
 def update_history_tracked_field(db, db_user, updated_value: float, date_str: str, field_type: str):
     new_entry = {"date": date_str, "value": updated_value}
     current_history: List[dict] = getattr(db_user, field_type) or []
@@ -292,6 +291,17 @@ def update_history_tracked_field(db, db_user, updated_value: float, date_str: st
         print(f"Error committing update for user {db_user.id}: {e}")
         raise e
 
+
+
+def get_pending_requests(db: Session, user_id: str):
+    return db.query(models.Friendship).filter(
+        models.Friendship.addressee_id == user_id,
+        models.Friendship.status == "pending"
+    )
+
+
+def get_public_user(db: Session, user_id: str):
+    return db.query(models.User).filter(models.User.id == user_id).first()
 
 def delete_workout(db: Session, workout_id: str, user_id: str) -> models.Workout | None:
     # First, find the workout to ensure it exists and belongs to the user
@@ -555,9 +565,6 @@ def send_friend_request(db: Session, requester_id: str, addressee_id: str):
     ).first()
     
     if existing:
-        if existing.status == 'accepted':
-            return existing # Already friends
-        # If pending, logic can vary (e.g. auto-accept if mutual), for now just return
         return existing
 
     friendship = models.Friendship(

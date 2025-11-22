@@ -39,3 +39,38 @@ def update_me(
     if not db_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return db_user
+
+
+@router.get("/{user_id}/public", response_model=schemas.PublicUser)
+def get_public_profile(
+    user_id: str,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    db_user = crud.get_user(db, id=user_id)
+    if not db_user:
+        print("User not found")
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    # Determine friendship status
+    status = crud.get_friendship_status(db, current_user.id, user_id)
+    
+    def get_latest(arr): return arr[-1]['value'] if arr else None
+    
+    return schemas.PublicUser(
+        id=db_user.id,
+        first_name=db_user.first_name,
+        last_name=db_user.last_name,
+        city=db_user.city,
+        country=db_user.country,
+        bio=db_user.bio,
+        profile_photo_url=db_user.profile_photo_url,
+        current_bench_1rm=get_latest(db_user.bench_1rm),
+        current_squat_1rm=get_latest(db_user.squat_1rm),
+        current_deadlift_1rm=get_latest(db_user.deadlift_1rm),
+        friendship_status=status,
+        is_friend=(status == 'accepted'),
+        consistency_score=crud.calculate_consistency_score(db_user.workouts),
+        total_workouts=len(db_user.workouts),
+        created_at=db_user.created_at
+    )
