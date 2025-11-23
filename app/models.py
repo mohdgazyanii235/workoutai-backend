@@ -50,6 +50,8 @@ class User(Base):
     workouts = relationship("Workout", back_populates="user")
     app_metric = relationship("AppMetric", back_populates="user", uselist=False)
 
+    push_token = Column(String, nullable=True)
+
 class Workout(Base):
     __tablename__ = 'workouts'
     id = Column(String, primary_key=True, index=True)
