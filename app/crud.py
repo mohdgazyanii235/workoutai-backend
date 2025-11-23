@@ -91,6 +91,9 @@ def update_workout(
     if "workout_type" in update_data:
         db_workout.workout_type = update_data["workout_type"]
 
+    if "visibility" in update_data:
+        db_workout.visibility = update_data["visibility"]
+
     db.add(db_workout)
 
     # 2. Handle Exercise Sets update if 'sets' field is present in the request
@@ -176,6 +179,14 @@ def update_workout(
         db.rollback() # Rollback in case of error during commit
         print(f"Error updating workout: {e}") # Or use logger
         raise e # Re-raise the exception to be handled by the endpoint
+
+
+def get_public_workouts_for_user(db: Session, user_id: str, limit: int = 10):
+    return db.query(models.Workout).filter(
+        models.Workout.user_id == user_id,
+        models.Workout.visibility == "public"
+    ).order_by(models.Workout.created_at.desc()).limit(limit).all()
+
 
 # --- THIS FUNCTION WAS MISSING ---
 def create_workout_from_log(db: Session, log: VoiceLog, user_id: str, created_at: Optional[datetime.datetime] = None) -> models.Workout:

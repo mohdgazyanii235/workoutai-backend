@@ -89,6 +89,7 @@ def update_workout_endpoint(
     return updated_workout
 
 
+
 @router.post("", response_model=schemas.WorkoutDetail)
 def create_workout_manual(
     workout_data: schemas.WorkoutUpdate, # Use the same schema as the PUT endpoint
@@ -107,3 +108,52 @@ def create_workout_manual(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create workout: {e}")
 
+
+# --- NEW ENDPOINT ---
+@router.get("/user/{user_id}", response_model=List[schemas.Workout])
+def get_user_public_workouts(
+    user_id: str,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Fetch public workouts for a specific user (e.g., a friend).
+    """
+    workouts = []
+    if(crud.get_friendship_status(db, user_id, current_user.id) == 'accepted'):
+        workouts = crud.get_public_workouts_for_user(db, user_id)
+    return workouts
+# --------------------
+
+# --- NEW ENDPOINT: Get Public Workout Details (Sanitized) ---
+@router.get("/public/{workout_id}", response_model=schemas.WorkoutDetail)
+def get_public_workout_detail(
+    workout_id: str,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(get_current_user),
+):
+    """
+    Fetch a workout specifically for public viewing.
+    Enforces visibility='public' and strips sensitive data like notes.
+    """
+    workout = (
+        db.query(models.Workout)
+        .filter(
+            models.Workout.id == workout_id,
+            models.Workout.visibility == 'public'
+        )
+        .first()
+    )
+    
+    if not workout:
+        # We return 404 if it's private or doesn't exist, to avoid leaking existence of private workouts
+        raise HTTPException(status_code=404, detail="Workout not found or is private")
+    
+    # --- Security: Explicitly remove notes ---
+    # SQLAlchemy models are mutable, so we can modify the instance before serialization
+    # However, to avoid accidentally committing this change to DB, we rely on Pydantic serialization
+    # passing a modified object.
+    workout.notes = None 
+    
+    return workout
+# -----------------------------------------------------------

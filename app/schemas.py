@@ -85,6 +85,7 @@ class WorkoutBase(BaseModel):
     notes: Optional[str] = None
     workout_type: Optional[str] = None
     created_at: datetime
+    visibility: str = "private" 
     class Config:
         from_attributes = True
 
@@ -150,9 +151,10 @@ class CardioSessionUpdate(BaseModel):
 class WorkoutUpdate(BaseModel):
     notes: Optional[str] = None
     workout_type: Optional[str] = None
+    visibility: Optional[str] = None
     sets: Optional[List[ExerciseSetUpdate]] = None
-    # --- MODIFIED: Add cardio_sessions to the update payload ---
     cardio_sessions: Optional[List[CardioSessionUpdate]] = None
+
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -227,3 +229,4 @@ class FriendshipResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
