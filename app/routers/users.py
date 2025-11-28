@@ -74,18 +74,3 @@ def get_public_profile(
         total_workouts=len(db_user.workouts),
         created_at=db_user.created_at
     )
-
-@router.put("/push-token")
-def update_push_token(
-    token_data: schemas.PushTokenUpdate,
-    current_user: Annotated[schemas.User, Depends(get_current_user)],
-    db: Session = Depends(get_db),
-):
-    """
-    Update the current user's Expo Push Token.
-    """
-    db_user = crud.get_user(db, id=current_user.id)
-    if db_user:
-        db_user.push_token = token_data.token
-        db.commit()
-    return {"message": "Token updated"}

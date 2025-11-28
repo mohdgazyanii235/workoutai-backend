@@ -155,8 +155,7 @@ class WorkoutUpdate(BaseModel):
     sets: Optional[List[ExerciseSetUpdate]] = None
     cardio_sessions: Optional[List[CardioSessionUpdate]] = None
 
-class PushTokenUpdate(BaseModel):
-    token: str
+
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
