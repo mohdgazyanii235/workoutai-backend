@@ -212,6 +212,11 @@ class PublicUser(BaseModel):
     total_workouts: Optional[int] = None
     is_friend: bool = False # "pending", "accepted", "none" or boolean if simple
     friendship_status: str = "none" # none, pending_sent, pending_received, accepted
+    nudge_count: int = 0
+    spot_count: int = 0
+    friend_count: int = 0
+    can_nudge: bool = True
+    can_spot: bool = True
 
 
 class FriendRequestCreate(BaseModel):
@@ -230,3 +235,21 @@ class FriendshipResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class Notification(BaseModel):
+    id: str
+    recipient_id: str
+    sender_id: Optional[str] = None
+    sender: Optional[PublicUser] = None
+    type: str # 'FRIEND_REQUEST', 'WORKOUT_SHARE'
+    reference_id: Optional[str] = None
+    title: str
+    message: str
+    is_read: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class SocialActionCreate(BaseModel):
+    target_user_id: str
+    action: str # 'nudge' or 'spot'

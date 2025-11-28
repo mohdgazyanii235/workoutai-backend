@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from app import models, crud # Added crud import
 from app.database import engine, SessionLocal # Added SessionLocal import
-from app.routers import log, auth, users, workouts, templates, social
+from app.routers import log, auth, users, workouts, templates, social, notifications
 import time # <-- Import time
 from fastapi import FastAPI, Request # <-- Import Request
 import os
@@ -102,6 +102,7 @@ app.include_router(users.router)
 app.include_router(workouts.router)
 app.include_router(templates.router)
 app.include_router(social.router)
+app.include_router(notifications.router)
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 
 @app.get("/")

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, func
 import uuid
 from . import models, schemas
 from .services.ai_service import VoiceLog
@@ -8,8 +8,7 @@ from datetime import timezone, timedelta
 import datetime
 from typing import Optional, List
 import requests
-
-
+import random # Imported for cheeky messages
 
 NATIVE_NOTFIY_APP_ID = 32792
 NATIVE_NOTIFY_APP_TOKEN = 'ssPq3VWQFV50vo8zLTTpOO'
@@ -73,7 +72,6 @@ def update_user_profile(db: Session, user_id: str, update: schemas.UserUpdate):
     return db_user
 
 
-# --- THIS FUNCTION WAS MISSING FROM YOUR LAST FILE ---
 def update_workout(
     db: Session,
     workout_id: str,
@@ -97,19 +95,33 @@ def update_workout(
     if "workout_type" in update_data:
         db_workout.workout_type = update_data["workout_type"]
 
+    # Create Notifications if switched to public
     if "visibility" in update_data:
+        old_visibility = db_workout.visibility
         db_workout.visibility = update_data["visibility"]
-        current_user = get_user(db, user_id)
-        friend_id_list = get_friends_id_list(db, user_id)
-        send_notification(friend_id_list, "Your Buddy Shared a Workout!", f"{current_user.first_name} just shared a workout! Time to spot!")
+        
+        # Only notify if switching from private -> public
+        if old_visibility != "public" and update_data["visibility"] == "public":
+            current_user = get_user(db, user_id)
+            friend_id_list = get_friends_id_list(db, user_id)
+            
+            # Send Notification to each friend
+            for friend_id in friend_id_list:
+                create_notification(
+                    db=db,
+                    recipient_id=friend_id,
+                    sender_id=user_id,
+                    type="WORKOUT_SHARE",
+                    title="Your Buddy Shared a Workout!",
+                    message=f"{current_user.first_name} just shared a workout! Time to spot!",
+                    reference_id=db_workout.id
+                )
 
     db.add(db_workout)
 
     # 2. Handle Exercise Sets update if 'sets' field is present in the request
     if workout_update.sets is not None:
-        # Get dictionary of current sets from DB, keyed by their ID
         current_sets_db = {s.id: s for s in db_workout.sets}
-        # Keep track of set IDs present in the incoming update payload
         incoming_set_ids = set()
 
         for set_data in workout_update.sets:
@@ -117,22 +129,22 @@ def update_workout(
                 # --- UPDATE existing set ---
                 db_set = current_sets_db[set_data.id]
                 db_set.exercise_name = set_data.exercise_name
-                db_set.set_number = set_data.set_number # Update set number
+                db_set.set_number = set_data.set_number 
                 db_set.reps = set_data.reps
                 db_set.weight = set_data.weight
                 db_set.weight_unit = set_data.weight_unit
-                db.add(db_set) # Mark existing set as modified
-                incoming_set_ids.add(set_data.id) # Mark this ID as processed
+                db.add(db_set) 
+                incoming_set_ids.add(set_data.id) 
             elif not set_data.id:
-                # --- CREATE new set --- (ID is None or missing)
+                # --- CREATE new set ---
                 db_new_set = models.ExerciseSet(
-                    id=str(uuid.uuid4()), # Generate new ID
+                    id=str(uuid.uuid4()), 
                     exercise_name=set_data.exercise_name,
-                    set_number=set_data.set_number, # Use number from payload
+                    set_number=set_data.set_number, 
                     reps=set_data.reps,
                     weight=set_data.weight,
                     weight_unit=set_data.weight_unit,
-                    workout_id=db_workout.id # Link to the parent workout
+                    workout_id=db_workout.id 
                 )
                 db.add(db_new_set)
 
@@ -141,7 +153,7 @@ def update_workout(
         for set_id in set_ids_to_delete:
             db.delete(current_sets_db[set_id])
 
-    # --- NEW: Handle Cardio Sessions update ---
+    # Handle Cardio Sessions update
     if workout_update.cardio_sessions is not None:
         current_cardio_db = {c.id: c for c in db_workout.cardio_sessions}
         incoming_cardio_ids = set()
@@ -170,6 +182,7 @@ def update_workout(
                     distance_unit=cardio_data.distance_unit,
                     speed=cardio_data.speed,
                     pace=cardio_data.pace,
+                    pace_unit=cardio_data.pace_unit,
                     laps=cardio_data.laps,
                     workout_id=db_workout.id
                 )
@@ -183,12 +196,12 @@ def update_workout(
 
     try:
         db.commit()
-        db.refresh(db_workout) # Refresh to load relationships correctly
+        db.refresh(db_workout) 
         return db_workout
     except Exception as e:
-        db.rollback() # Rollback in case of error during commit
-        print(f"Error updating workout: {e}") # Or use logger
-        raise e # Re-raise the exception to be handled by the endpoint
+        db.rollback() 
+        print(f"Error updating workout: {e}") 
+        raise e 
 
 
 def get_public_workouts_for_user(db: Session, user_id: str, limit: int = 10):
@@ -198,7 +211,6 @@ def get_public_workouts_for_user(db: Session, user_id: str, limit: int = 10):
     ).order_by(models.Workout.created_at.desc()).limit(limit).all()
 
 
-# --- THIS FUNCTION WAS MISSING ---
 def create_workout_from_log(db: Session, log: VoiceLog, user_id: str, created_at: Optional[datetime.datetime] = None) -> models.Workout:
     db_workout = models.Workout(
         id=str(uuid.uuid4()),
@@ -250,10 +262,23 @@ def create_workout_from_log(db: Session, log: VoiceLog, user_id: str, created_at
     try:
         db.commit()
         db.refresh(db_workout)
+        
+        # Create Notifications if Public
         if log.visibility == "public":
             current_user = get_user(db, user_id)
-            friendship_list = get_friends_id_list(db, user_id)
-            send_notification(friendship_list, "Your Buddy Just Logged a workout!", f"{current_user.first_name} just crushed a workout! Spot them to show your support.")
+            friend_ids = get_friends_id_list(db, user_id)
+            
+            for friend_id in friend_ids:
+                create_notification(
+                    db=db,
+                    recipient_id=friend_id,
+                    sender_id=user_id,
+                    type="WORKOUT_SHARE",
+                    title="Your Buddy Just Logged a workout!",
+                    message=f"{current_user.first_name} just crushed a workout! Spot them to show your support.",
+                    reference_id=db_workout.id
+                )
+                
     except Exception as e:
         db.rollback()
         print(f"Error creating workout children from log: {e}")
@@ -272,28 +297,22 @@ def manage_voice_log(db: Session, voice_log: VoiceLog, user_id: str, created_at:
         return None
 
     if voice_log.updated_weight:
-        print("User wants to update their weight")
         update_history_tracked_field(db, db_user, voice_log.updated_weight, date_str, "weight")
     
     if voice_log.updated_bench_1rm:
-        print("User wants to update their bench 1rm")
         update_history_tracked_field(db, db_user, voice_log.updated_bench_1rm, date_str, "bench_1rm")
 
     if voice_log.updated_squat_1rm:
-        print("User wants to update their squat 1rm")
         update_history_tracked_field(db, db_user, voice_log.updated_squat_1rm, date_str, "squat_1rm")
 
     if voice_log.updated_deadlift_1rm:
-        print("User wants to update their deadlift 1rm")
         update_history_tracked_field(db, db_user, voice_log.updated_deadlift_1rm, date_str, "deadlift_1rm")
 
     if voice_log.updated_fat_percentage:
-        print("User wants to update their fat %")
         update_history_tracked_field(db, db_user, voice_log.updated_fat_percentage, date_str, "fat_percentage")
 
-    # MODIFIED: Check for sets OR cardio
+    # Check for sets OR cardio
     if (voice_log.sets and len(voice_log.sets) > 0) or (voice_log.cardio and len(voice_log.cardio) > 0):
-        print("user wants to log a workout or cardio")
         create_workout_from_log(db, voice_log, user_id, logging_timestamp)
 
     if not voice_log.updated_weight and not voice_log.updated_bench_1rm and not voice_log.updated_squat_1rm and not voice_log.updated_deadlift_1rm and not voice_log.updated_fat_percentage and not ((voice_log.sets and len(voice_log.sets) > 0) or (voice_log.cardio and len(voice_log.cardio) > 0)):
@@ -330,7 +349,6 @@ def get_public_user(db: Session, user_id: str):
     return db.query(models.User).filter(models.User.id == user_id).first()
 
 def delete_workout(db: Session, workout_id: str, user_id: str) -> models.Workout | None:
-    # First, find the workout to ensure it exists and belongs to the user
     db_workout = (
         db.query(models.Workout)
         .filter(
@@ -341,11 +359,9 @@ def delete_workout(db: Session, workout_id: str, user_id: str) -> models.Workout
     )
     
     if not db_workout:
-        return None  # Workout not found or doesn't belong to user
+        return None  
 
     # 1. Delete the workout itself.
-    # SQLAlchemy will handle deleting child ExerciseSets and CardioSessions
-    # because we added `cascade="all, delete-orphan"` to the relationships.
     db.delete(db_workout)
     
     # 2. Commit the transaction
@@ -365,7 +381,6 @@ def create_manual_workout(db: Session, workout_data: schemas.WorkoutUpdate, user
     )
     db.add(db_workout)
     
-    # --- MODIFICATION: Commit the parent workout FIRST to get its ID ---
     try:
         db.commit()
         db.refresh(db_workout)
@@ -373,7 +388,6 @@ def create_manual_workout(db: Session, workout_data: schemas.WorkoutUpdate, user
         db.rollback()
         print(f"Error creating parent workout: {e}")
         raise e
-    # -----------------------------------------------------------------
 
     # 2. Create the child ExerciseSets
     if workout_data.sets:
@@ -385,11 +399,11 @@ def create_manual_workout(db: Session, workout_data: schemas.WorkoutUpdate, user
                 reps=set_data.reps,
                 weight=set_data.weight,
                 weight_unit=set_data.weight_unit,
-                workout_id=db_workout.id # Link to the parent workout
+                workout_id=db_workout.id 
             )
             db.add(db_exercise_set)
 
-    # --- NEW: Create the child CardioSessions ---
+    # Create the child CardioSessions
     if workout_data.cardio_sessions:
         for cardio_data in workout_data.cardio_sessions:
             db_cardio_session = models.CardioSession(
@@ -413,7 +427,7 @@ def create_manual_workout(db: Session, workout_data: schemas.WorkoutUpdate, user
         return db_workout
     except Exception as e:
         db.rollback()
-        print(f"Error creating manual workout children: {e}") # Modified log
+        print(f"Error creating manual workout children: {e}") 
         raise e
 
 
@@ -487,21 +501,16 @@ def create_template(db: Session, template_name: str, exercise_names: List[str]) 
 
 def log_app_metric(db: Session, user_id: str):
     try:
-        # Try to find an existing record for this user
         metric = db.query(models.AppMetric).filter(models.AppMetric.user_id == user_id).first()
         
         if metric:
-            # Update existing record
             metric.last_app_query = datetime.datetime.utcnow()
-            # --- NEW: Increment counter ---
             metric.total_api_calls += 1
         else:
-            # Create new record
             metric = models.AppMetric(
                 id=str(uuid.uuid4()),
                 user_id=user_id,
                 last_app_query=datetime.datetime.utcnow(),
-                # --- NEW: Initialize counter ---
                 total_api_calls=1 
             )
             db.add(metric)
@@ -512,13 +521,11 @@ def log_app_metric(db: Session, user_id: str):
     except Exception as e:
         db.rollback()
         print(f"Error logging app metric for user {user_id}: {e}")
-        # Do not raise, we don't want metrics logging to break the request
         return None
     
 
 def log_rubbish_voice_log(db: Session, user_id: str):
     try:
-        # Try to find an existing record for this user
         metric = db.query(models.AppMetric).filter(models.AppMetric.user_id == user_id).first()
         
         if metric.rubbish_voice_logs:
@@ -532,13 +539,11 @@ def log_rubbish_voice_log(db: Session, user_id: str):
     except Exception as e:
         db.rollback()
         print(f"Error logging app metric for user {user_id}: {e}")
-        # Do not raise, we don't want metrics logging to break the request
         return None
 
 def log_open_ai_query(db: Session, user_id: str):
     print("adding to log metric")
     try:
-        # Try to find an existing record for this user
         metric = db.query(models.AppMetric).filter(models.AppMetric.user_id == user_id).first()
         
         if metric.open_ai_calls:
@@ -552,14 +557,10 @@ def log_open_ai_query(db: Session, user_id: str):
     except Exception as e:
         db.rollback()
         print(f"Error logging app metric for user {user_id}: {e}")
-        # Do not raise, we don't want metrics logging to break the request
         return None
 
 
 def get_friendship_status(db: Session, user_a: str, user_b: str) -> str:
-    """
-    Returns: 'none', 'pending_sent', 'pending_received', 'accepted'
-    """
     # Check if A sent to B
     sent = db.query(models.Friendship).filter(
         models.Friendship.requester_id == user_a,
@@ -607,7 +608,15 @@ def send_friend_request(db: Session, requester_id: str, addressee_id: str):
 
     current_user = get_user(db, requester_id)
 
-    send_notification([addressee_id], "Buddy Request!!!", current_user.first_name + " Wants to be your buddy!", )
+    create_notification(
+        db=db,
+        recipient_id=addressee_id,
+        sender_id=requester_id,
+        type="FRIEND_REQUEST",
+        title="Buddy Request!!!",
+        message=f"{current_user.first_name} Wants to be your buddy!",
+        reference_id=friendship.id
+    )
 
     return friendship
 
@@ -625,16 +634,44 @@ def respond_to_friend_request(db: Session, user_id: str, friendship_id: str, act
     if action == 'accept':
         friendship.status = 'accepted'
         current_user = get_user(db, user_id)
-        send_notification([friendship.requester_id], "Buddy Request Accepted!", current_user.first_name + " Has accepted your buddy request!") 
+        
+        create_notification(
+            db=db,
+            recipient_id=friendship.requester_id,
+            sender_id=user_id,
+            type="FRIEND_ACCEPT",
+            title="Buddy Request Accepted!",
+            message=f"{current_user.first_name} Has accepted your buddy request!",
+            reference_id=friendship.id
+        )
+        
     elif action == 'reject':
         db.delete(friendship) # Or set to 'rejected'
         
     db.commit()
 
-    
-
     return friendship
 
+def remove_friend(db: Session, user_a: str, user_b: str):
+    """
+    Removes an existing friendship between user_a and user_b.
+    """
+    friendship = db.query(models.Friendship).filter(
+        and_(
+            or_(
+                and_(models.Friendship.requester_id == user_a, models.Friendship.addressee_id == user_b),
+                and_(models.Friendship.requester_id == user_b, models.Friendship.addressee_id == user_a)
+            ),
+            models.Friendship.status == 'accepted'
+        )
+    ).first()
+
+    if friendship:
+        db.delete(friendship)
+        db.commit()
+        return True
+    
+    return False
 
 def get_friends_id_list(db: Session, user_id: str):
     friendships = db.query(models.Friendship).filter(
@@ -716,9 +753,11 @@ def calculate_consistency_score(workouts: list) -> float:
     return float(score)
 
 
-
-def send_notification(target_users: list, title: str, message: str):
-    print(f"HELOOOOOOOO {target_users}")
+def send_push_notification(target_users: list, title: str, message: str):
+    """
+    Sends the actual push notification via NativeNotify.
+    """
+    print(f"Sending Push to {target_users}: {title}")
     notification_url = 'https://app.nativenotify.com/api/indie/group/notification'
     payload = {
         'subIDs': target_users,
@@ -728,6 +767,160 @@ def send_notification(target_users: list, title: str, message: str):
         'message': message
     }
 
-    response = requests.post(notification_url, json=payload)
-    print(response.text)
-    return requests.post(notification_url, json=payload)
+    try:
+        response = requests.post(notification_url, json=payload)
+        # print(response.text)
+    except Exception as e:
+        print(f"Failed to send push: {e}")
+
+def create_notification(
+    db: Session, 
+    recipient_id: str, 
+    type: str, 
+    title: str, 
+    message: str, 
+    sender_id: Optional[str] = None, 
+    reference_id: Optional[str] = None
+):
+    """
+    Creates a persistent notification in the DB and triggers a push.
+    """
+    # 1. Create DB Record
+    db_notif = models.Notification(
+        id=str(uuid.uuid4()),
+        recipient_id=recipient_id,
+        sender_id=sender_id,
+        type=type,
+        reference_id=reference_id,
+        title=title,
+        message=message,
+        is_read=False
+    )
+    db.add(db_notif)
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"Error saving notification to DB: {e}")
+
+    # 2. Trigger Push
+    send_push_notification([recipient_id], title, message)
+    
+    return db_notif
+
+def get_notifications(db: Session, user_id: str, limit: int = 50, skip: int = 0):
+    return db.query(models.Notification).filter(
+        models.Notification.recipient_id == user_id
+    ).order_by(models.Notification.created_at.desc()).offset(skip).limit(limit).all()
+
+def mark_notification_read(db: Session, notification_id: str, user_id: str):
+    notif = db.query(models.Notification).filter(
+        models.Notification.id == notification_id,
+        models.Notification.recipient_id == user_id
+    ).first()
+    
+    if notif:
+        notif.is_read = True
+        db.commit()
+        db.refresh(notif)
+    return notif
+
+def mark_all_notifications_read(db: Session, user_id: str):
+    db.query(models.Notification).filter(
+        models.Notification.recipient_id == user_id,
+        models.Notification.is_read == False
+    ).update({"is_read": True})
+    db.commit()
+
+# --- NEW: Social Logic for Nudges & Spots ---
+
+def get_friend_count(db: Session, user_id: str) -> int:
+    """Calculates number of accepted friends"""
+    return db.query(models.Friendship).filter(
+        and_(
+            or_(models.Friendship.requester_id == user_id, models.Friendship.addressee_id == user_id),
+            models.Friendship.status == 'accepted'
+        )
+    ).count()
+
+def get_weekly_interaction_count(db: Session, sender_id: str, action_type: str) -> int:
+    """Counts how many actions of this type the user has performed in the last 7 days"""
+    seven_days_ago = datetime.datetime.utcnow() - timedelta(days=7)
+    return db.query(models.UserInteraction).filter(
+        models.UserInteraction.sender_id == sender_id,
+        models.UserInteraction.action_type == action_type,
+        models.UserInteraction.created_at >= seven_days_ago
+    ).count()
+
+def perform_social_action(db: Session, sender_id: str, recipient_id: str, action: str) -> bool:
+    """
+    Performs 'nudge' or 'spot'. Enforces limits.
+    Returns True if successful, False (or raises exception) if failed.
+    """
+    # 1. Enforce Limits (3 per week)
+    count = get_weekly_interaction_count(db, sender_id, action)
+    if count >= 3:
+        raise ValueError(f"You have used all your {action}s for the week!")
+
+    # 2. Check Spam (Optional - 1 per day per person)
+    one_day_ago = datetime.datetime.utcnow() - timedelta(days=1)
+    recent = db.query(models.UserInteraction).filter(
+        models.UserInteraction.sender_id == sender_id,
+        models.UserInteraction.recipient_id == recipient_id,
+        models.UserInteraction.action_type == action,
+        models.UserInteraction.created_at >= one_day_ago
+    ).first()
+    
+    if recent:
+        raise ValueError(f"You already sent a {action} to this user today!")
+
+    # 3. Create Interaction Record
+    interaction = models.UserInteraction(
+        id=str(uuid.uuid4()),
+        sender_id=sender_id,
+        recipient_id=recipient_id,
+        action_type=action
+    )
+    db.add(interaction)
+
+    # 4. Increment User Counters
+    recipient = get_user(db, recipient_id)
+    sender = get_user(db, sender_id)
+    
+    if action == 'nudge':
+        recipient.nudge_count += 1
+        title = "Someone is thinking of you!"
+        # Cheeky messages
+        messages = [
+            f"{sender.first_name} thinks you're slacking. Get to the gym!",
+            f"{sender.first_name} says: Those weights won't lift themselves.",
+            f"Reminder from {sender.first_name}: Your muscles are shrinking as we speak.",
+            f"{sender.first_name} is nudging you. Don't let them down!",
+            f"Hey! {sender.first_name} noticed you haven't logged a workout lately."
+        ]
+        msg = random.choice(messages)
+        
+    elif action == 'spot':
+        recipient.spot_count += 1
+        title = "You've been Spotted!"
+        msg = f"{sender.first_name} spotted you! Keep crushing it! 💪"
+
+    db.add(recipient)
+    
+    # 5. Send Notification
+    create_notification(
+        db=db,
+        recipient_id=recipient_id,
+        sender_id=sender_id,
+        type=action.upper(), # NUDGE or SPOT
+        title=title,
+        message=msg,
+        reference_id=interaction.id
+    )
+
+    try:
+        db.commit()
+        return True
+    except Exception as e:
+        db.rollback()
+        raise e

@@ -50,6 +50,12 @@ class User(Base):
     workouts = relationship("Workout", back_populates="user")
     app_metric = relationship("AppMetric", back_populates="user", uselist=False)
 
+    notifications_received = relationship("Notification", foreign_keys="Notification.recipient_id", back_populates="recipient")
+    notifications_sent = relationship("Notification", foreign_keys="Notification.sender_id", back_populates="sender")
+
+    nudge_count = Column(Integer, default=0, nullable=False)
+    spot_count = Column(Integer, default=0, nullable=False)
+
 class Workout(Base):
     __tablename__ = 'workouts'
     id = Column(String, primary_key=True, index=True)
@@ -128,3 +134,32 @@ class AppMetric(Base):
     user = relationship("User", back_populates="app_metric")
     open_ai_calls = Column(Integer, default=0, nullable=True)
     rubbish_voice_logs = Column(Integer, default=0, nullable=True)
+
+
+class Notification(Base):
+    __tablename__ = 'notifications'
+    
+    id = Column(String, primary_key=True, index=True)
+    recipient_id = Column(String, ForeignKey('users.id'), nullable=False, index=True)
+    sender_id = Column(String, ForeignKey('users.id'), nullable=True) # Nullable for system messages
+    
+    type = Column(String, nullable=False) # 'FRIEND_REQUEST', 'WORKOUT_SHARE', 'SYSTEM'
+    reference_id = Column(String, nullable=True) # ID of the related object (e.g., friendship_id, workout_id)
+    
+    title = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    
+    is_read = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    recipient = relationship("User", foreign_keys=[recipient_id], back_populates="notifications_received")
+    sender = relationship("User", foreign_keys=[sender_id], back_populates="notifications_sent")
+
+
+class UserInteraction(Base):
+    __tablename__ = 'user_interactions'
+    id = Column(String, primary_key=True, index=True)
+    sender_id = Column(String, ForeignKey('users.id'), nullable=False, index=True)
+    recipient_id = Column(String, ForeignKey('users.id'), nullable=False)
+    action_type = Column(String, nullable=False) # 'nudge' or 'spot'
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
