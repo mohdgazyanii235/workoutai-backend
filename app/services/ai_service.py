@@ -16,10 +16,6 @@ class InvalidVoiceLogException(ValueError):
     pass
 
 # --- NO CHANGE TO PYDANTIC MODELS ---
-# This model is ALREADY flexible.
-# "sets" maps to the DB "set_number" (for granular)
-# OR "number of sets" (for summary/straight).
-# This is the key to backward compatibility.
 class ExerciseSet(BaseModel):
     exercise_name: str = Field(description="The name of the exercise performed, e.g., 'Bench Press'")
     reps: int = Field(description="The number of repetitions performed in the set.")
@@ -32,7 +28,8 @@ class CardioLog(BaseModel):
     duration_minutes: Optional[float] = Field(description="The duration of the exercise in minutes. e.g., '20 min' becomes 20.0")
     speed: Optional[float] = Field(description="The speed, e.g., 10")
     pace: Optional[str] = Field(description="The pace, e.g., '5:30', '8:10'.")
-    pace_unit: Optional[str] = Field(description="The unit of measurement for pace, this can either be Min/Mile or Min/KM")
+    # --- MODIFIED DESCRIPTION ---
+    pace_unit: Optional[str] = Field(description="The unit for pace. EXTRACT this from text (e.g. 'per mile' -> 'Min/Mile', 'per km' -> 'Min/KM'). Default to 'Min/KM' only if unspecified.")
     distance: Optional[float] = Field(description="The distance.")
     distance_unit: Optional[str] = Field(description="The unit of distance, this can either be Kilometer(s) or Mile(s)")
     laps: Optional[int] = Field(description="The number of laps.")
@@ -41,6 +38,7 @@ class VoiceLog(BaseModel):
     cardio: List[CardioLog] = Field(description="A list of all cardio exercises in the workout.")
     sets: List[ExerciseSet] = Field(description="A list of all the exercise sets in the workout.")
     note: str = Field(description="The user's notes on the workout.")
+    visibility: str = Field(description="The visibilty should be 'private' by default but 'public' if the users says it.")
     workout_type: str = Field(description="This is the type of workout the user did.")
     updated_weight: float | None = Field(description="This is filled up if the user updated their weight.")
     updated_weight_unit: str = Field(description="The unit of the users updated weight")
@@ -77,7 +75,7 @@ def structured_log_text(text: str) -> VoiceLog:
 
     ---
     **EXAMPLE 1: Straight/Summary Set**
-    User input: "today I did bench press 3 sets of 10 at 80kg. Overall I had a great workout."
+    User input: "today I did bench press 3 sets of 10 at 80kg. Overall I had a great workout. I would like to share this with my buddies!" 
     Your output:
     {{
         "cardio": [],
@@ -101,11 +99,13 @@ def structured_log_text(text: str) -> VoiceLog:
         "updated_deadlift_1rm": null,
         "updated_deadlift_1rm_unit": "",
         "updated_fat_percentage": null,
-        "comment": "Your chest workout is logged! Well done!"
+        "comment": "Your chest workout is logged! Well done!",
+        "visibility": "public" 
+
     }}
     ---
     **EXAMPLE 2: Pyramid/Granular Sets + Cardio**
-    User input: "I started with a 20 min 1 mile run, then I did dumbbell press 12 reps at 50kg, 10 reps at 60kg, and 8 reps at 70kg."
+    User input: "I started with a 20 min 2 mile run with an average pace of 10 minutes per mile , then I did dumbbell press 12 reps at 50kg, 10 reps at 60kg, and 8 reps at 70kg."
     Your output:
     {{
         "cardio": [
@@ -113,10 +113,10 @@ def structured_log_text(text: str) -> VoiceLog:
                 "exercise_name": "Running",
                 "duration_minutes": 20.0,
                 "speed": null,
-                "pace": null,
-                "pace_unit": null, // This can be null, Min/Mile or Min/Km but default is Min/Km..if the user provides pace use default.
-                "distance": 1.0,
-                "distance_unit": "mile",
+                "pace": "10",
+                "pace_unit": "Min/Mile", 
+                "distance": 2.0,
+                "distance_unit": "Mile",
                 "laps": null
             }}
         ],
@@ -141,7 +141,7 @@ def structured_log_text(text: str) -> VoiceLog:
                 "weight": 70,
                 "weight_unit": "kg",
                 "sets": 3
-            }}
+            }} 
         ],
         "note": "Great pyramid sets on the dumbbell press after your run!",
         "workout_type": "Chest",
@@ -154,7 +154,8 @@ def structured_log_text(text: str) -> VoiceLog:
         "updated_deadlift_1rm": null,
         "updated_deadlift_1rm_unit": "",
         "updated_fat_percentage": null,
-        "comment": "Your run and pyramid set workout has been logged!"
+        "comment": "Your run and pyramid set workout has been logged!",
+        "visibility": "private" 
     }}
     ---
     **EXAMPLE 3: Weight Update Only**
@@ -174,7 +175,8 @@ def structured_log_text(text: str) -> VoiceLog:
         "updated_deadlift_1rm": null,
         "updated_deadlift_1rm_unit": "",
         "updated_fat_percentage": null,
-        "comment": "Your new weight of 90kg has been tracked!"
+        "comment": "Your new weight of 90kg has been tracked!",
+        "visibility": "private" 
     }}
     ---
     
@@ -186,6 +188,46 @@ def structured_log_text(text: str) -> VoiceLog:
     -   "note" field is for you to write a simple workout summary with motivating text and a simple summary of the workout.
     -   Remember, if a user has logged a workout, or a cardio session, the workout_type field is mandatory this should be the name of the workout, like chest, cardio, running etc.
     -   If the user only updates a metric (like weight), leave `cardio`, `sets`, `note`, and `workout_type` as empty lists or strings.
+    -   **Pace Units:** If the user specifies "per mile", set `pace_unit` to "Min/Mile". If "per km" or "per kilometer", set to "Min/KM". Only default to "Min/KM" if the user mentions pace but NOT the unit.
+    -   It is VERY IMPORTANT to understand that workouts sets can be of 2 types, straight and pyramid. Straigt is when the user simply says 'I did 3 sets 12 reps of 50kgs of x", you need to create and object that looks like the following:
+    {{
+        "sets": [
+            {{
+                "exercise_name": "Bench Press",
+                "reps": 10,
+                "weight": 80,
+                "weight_unit": "kg",
+                "sets": 3
+            }}
+        ],..... Rest of the JSON
+    }}
+    - but if the user says they did a pyramid set, and they will usually say that by describing the entire set like 'the first set I did 12 reps and 50 kgs, the second set I did xxxx'. In this case the object should look like the following:
+    {{
+        "sets": [
+            {{
+                "exercise_name": "Dumbbell Press",
+                "reps": 12,
+                "weight": 50,
+                "weight_unit": "kg",
+                "sets": 1
+            }},
+            {{
+                "exercise_name": "Dumbbell Press",
+                "reps": 10,
+                "weight": 60,
+                "weight_unit": "kg",
+                "sets": 2
+            }},
+            {{
+                "exercise_name": "Dumbbell Press",
+                "reps": 8,
+                "weight": 70,
+                "weight_unit": "kg",
+                "sets": 3
+            }} 
+        ],..... Rest of the JSON
+    }}
+
 
     Now parse the following users description:
     "{user_text}"

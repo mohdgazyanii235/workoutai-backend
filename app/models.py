@@ -58,7 +58,7 @@ class Workout(Base):
     workout_type = Column(String, nullable=True)
     user_id = Column(String, ForeignKey('users.id'))
     user = relationship("User", back_populates="workouts")
-    visibility = Column(String, default="private", nullable=False)
+    visibility = Column(String, default="public", nullable=False)
     sets = relationship(
         "ExerciseSet", 
         back_populates="workout", 

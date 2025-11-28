@@ -7,6 +7,12 @@ from app.auth import auth_service
 from datetime import timezone, timedelta
 import datetime
 from typing import Optional, List
+import requests
+
+
+
+NATIVE_NOTFIY_APP_ID = 32792
+NATIVE_NOTIFY_APP_TOKEN = 'ssPq3VWQFV50vo8zLTTpOO'
 
 def get_user(db: Session, id: str):
     return db.query(models.User).filter(models.User.id == id).first()
@@ -93,6 +99,9 @@ def update_workout(
 
     if "visibility" in update_data:
         db_workout.visibility = update_data["visibility"]
+        current_user = get_user(db, user_id)
+        friend_id_list = get_friends_id_list(db, user_id)
+        send_notification(friend_id_list, "Your Buddy Shared a Workout!", f"{current_user.first_name} just shared a workout! Time to spot!")
 
     db.add(db_workout)
 
@@ -147,6 +156,7 @@ def update_workout(
                 db_cardio.distance_unit = cardio_data.distance_unit
                 db_cardio.speed = cardio_data.speed
                 db_cardio.pace = cardio_data.pace
+                db_cardio.pace_unit = cardio_data.pace_unit
                 db_cardio.laps = cardio_data.laps
                 db.add(db_cardio)
                 incoming_cardio_ids.add(cardio_data.id)
@@ -195,11 +205,11 @@ def create_workout_from_log(db: Session, log: VoiceLog, user_id: str, created_at
         user_id=user_id,
         notes=log.note,
         workout_type=log.workout_type,
-        created_at=created_at
+        created_at=created_at,
+        visibility=log.visibility
     )
     db.add(db_workout)
     
-    # Commit workout first to get its ID
     try:
         db.commit()
         db.refresh(db_workout)
@@ -229,6 +239,7 @@ def create_workout_from_log(db: Session, log: VoiceLog, user_id: str, created_at
                 duration_minutes=ai_cardio.duration_minutes,
                 speed=ai_cardio.speed,
                 pace=ai_cardio.pace,
+                pace_unit=ai_cardio.pace_unit,
                 distance=ai_cardio.distance,
                 distance_unit=ai_cardio.distance_unit,
                 laps=ai_cardio.laps,
@@ -239,6 +250,10 @@ def create_workout_from_log(db: Session, log: VoiceLog, user_id: str, created_at
     try:
         db.commit()
         db.refresh(db_workout)
+        if log.visibility == "public":
+            current_user = get_user(db, user_id)
+            friendship_list = get_friends_id_list(db, user_id)
+            send_notification(friendship_list, "Your Buddy Just Logged a workout!", f"{current_user.first_name} just crushed a workout! Spot them to show your support.")
     except Exception as e:
         db.rollback()
         print(f"Error creating workout children from log: {e}")
@@ -385,6 +400,7 @@ def create_manual_workout(db: Session, workout_data: schemas.WorkoutUpdate, user
                 distance_unit=cardio_data.distance_unit,
                 speed=cardio_data.speed,
                 pace=cardio_data.pace,
+                pace_unit=cardio_data.pace_unit,
                 laps=cardio_data.laps,
                 workout_id=db_workout.id
             )
@@ -575,6 +591,7 @@ def send_friend_request(db: Session, requester_id: str, addressee_id: str):
         )
     ).first()
     
+
     if existing:
         return existing
 
@@ -587,6 +604,11 @@ def send_friend_request(db: Session, requester_id: str, addressee_id: str):
     db.add(friendship)
     db.commit()
     db.refresh(friendship)
+
+    current_user = get_user(db, requester_id)
+
+    send_notification([addressee_id], "Buddy Request!!!", current_user.first_name + " Wants to be your buddy!", )
+
     return friendship
 
 
@@ -602,11 +624,32 @@ def respond_to_friend_request(db: Session, user_id: str, friendship_id: str, act
         
     if action == 'accept':
         friendship.status = 'accepted'
+        current_user = get_user(db, user_id)
+        send_notification([friendship.requester_id], "Buddy Request Accepted!", current_user.first_name + " Has accepted your buddy request!") 
     elif action == 'reject':
         db.delete(friendship) # Or set to 'rejected'
         
     db.commit()
+
+    
+
     return friendship
+
+
+def get_friends_id_list(db: Session, user_id: str):
+    friendships = db.query(models.Friendship).filter(
+        and_(
+            or_(models.Friendship.requester_id == user_id, models.Friendship.addressee_id == user_id),
+            models.Friendship.status == 'accepted'
+            )
+        ).all()
+    friend_ids = []
+    for f in friendships:
+        if f.requester_id == user_id:
+            friend_ids.append(f.addressee_id)
+        else:
+            friend_ids.append(f.requester_id)
+    return friend_ids
 
 def get_friends(db: Session, user_id: str):
     """Get all accepted friendships"""
@@ -671,3 +714,20 @@ def calculate_consistency_score(workouts: list) -> float:
     recent_workouts = [w for w in valid_workouts if w.created_at >= thirty_days_ago]
     score = min(len(recent_workouts) * 8, 100) # 12 workouts a month = ~100%
     return float(score)
+
+
+
+def send_notification(target_users: list, title: str, message: str):
+    print(f"HELOOOOOOOO {target_users}")
+    notification_url = 'https://app.nativenotify.com/api/indie/group/notification'
+    payload = {
+        'subIDs': target_users,
+        'appId': NATIVE_NOTFIY_APP_ID,
+        'appToken': NATIVE_NOTIFY_APP_TOKEN,
+        'title': title,
+        'message': message
+    }
+
+    response = requests.post(notification_url, json=payload)
+    print(response.text)
+    return requests.post(notification_url, json=payload)
