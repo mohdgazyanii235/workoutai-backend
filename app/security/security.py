@@ -1,7 +1,11 @@
 # app/security.py
 
 from fastapi import Security, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security.api_key import APIKeyHeader
+from typing import Annotated
+from app.auth.auth_service import get_current_user
+from app import schemas
 import os
 
 API_KEY = os.getenv("PROLOG_API_KEY")
@@ -18,3 +22,8 @@ async def get_api_key(api_key_header: str = Security(api_key_header)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
         )
+    
+def get_current_admin(current_user: Annotated[schemas.User, Depends(get_current_user)]):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required")
+    return current_user

@@ -55,6 +55,7 @@ class User(Base):
 
     nudge_count = Column(Integer, default=0, nullable=False)
     spot_count = Column(Integer, default=0, nullable=False)
+    is_admin = Column(Boolean, default=False, nullable=False)
 
 class Workout(Base):
     __tablename__ = 'workouts'

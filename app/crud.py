@@ -924,3 +924,15 @@ def perform_social_action(db: Session, sender_id: str, recipient_id: str, action
     except Exception as e:
         db.rollback()
         raise e
+    
+
+def get_all_users_lite(db: Session) -> List[models.User]:
+    return db.query(models.User).order_by(models.User.email).all()
+
+def get_all_app_metrics(db: Session):
+    """Fetch all metrics joined with user email for context"""
+    return db.query(models.AppMetric, models.User.email).join(models.User, models.AppMetric.user_id == models.User.id).all()
+
+def get_total_user_count(db: Session) -> int:
+    """Count total number of registered users"""
+    return db.query(models.User).count()

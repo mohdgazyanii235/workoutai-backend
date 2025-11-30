@@ -20,7 +20,6 @@ class UserUpdate(BaseModel):
     city: Optional[str] = None
     country: Optional[str] = None
 
-
     weight: Optional[List[HistoryEntry]] = None
     height: Optional[float] = Field(None, ge=0)
     fat_percentage: Optional[List[HistoryEntry]] = None
@@ -65,6 +64,9 @@ class User(UserBase):
     total_workouts: int = 0
     consistency_score: float = 0.0
     
+    # --- NEW: Admin Flag ---
+    is_admin: bool = False
+    
     class Config:
         from_attributes = True
 
@@ -103,7 +105,6 @@ class ExerciseSet(BaseModel):
     class Config:
         from_attributes = True
 
-# --- NEW: CardioSession Schema (for reading) ---
 class CardioSession(BaseModel):
     id: str
     name: str
@@ -122,11 +123,9 @@ class CardioSession(BaseModel):
 class WorkoutDetail(WorkoutBase):
     user_id: str
     sets: list[ExerciseSet] = []
-    # --- NEW: Add cardio_sessions to the detail view ---
     cardio_sessions: list[CardioSession] = []
 
 class ExerciseSetUpdate(BaseModel):
-    # --- MODIFIED: Explicitly allow None as a value ---
     id: str | None = None
     exercise_name: str
     set_number: int
@@ -134,9 +133,7 @@ class ExerciseSetUpdate(BaseModel):
     weight: float
     weight_unit: str
 
-# --- NEW: CardioSessionUpdate Schema (for create/update) ---
 class CardioSessionUpdate(BaseModel):
-    # --- MODIFIED: Explicitly allow None as a value ---
     id: str | None = None
     name: str
     duration_minutes: Optional[float] = None
@@ -202,16 +199,15 @@ class PublicUser(BaseModel):
     created_at: datetime
     profile_photo_url: Optional[str] = None
     
-    # Only expose latest stats, not full history
     current_bench_1rm: Optional[float] = None
     current_squat_1rm: Optional[float] = None
     current_deadlift_1rm: Optional[float] = None
     
-    # Computed fields
     consistency_score: Optional[float] = None
     total_workouts: Optional[int] = None
-    is_friend: bool = False # "pending", "accepted", "none" or boolean if simple
-    friendship_status: str = "none" # none, pending_sent, pending_received, accepted
+    is_friend: bool = False 
+    friendship_status: str = "none" 
+    
     nudge_count: int = 0
     spot_count: int = 0
     friend_count: int = 0
@@ -223,7 +219,7 @@ class FriendRequestCreate(BaseModel):
     target_user_id: str
 
 class FriendRequestAction(BaseModel):
-    action: str # "accept", "reject"
+    action: str 
 
 class FriendshipResponse(BaseModel):
     id: str
@@ -239,8 +235,8 @@ class Notification(BaseModel):
     id: str
     recipient_id: str
     sender_id: Optional[str] = None
-    sender: Optional[PublicUser] = None
-    type: str # 'FRIEND_REQUEST', 'WORKOUT_SHARE'
+    sender: Optional[PublicUser] = None 
+    type: str 
     reference_id: Optional[str] = None
     title: str
     message: str
@@ -252,4 +248,34 @@ class Notification(BaseModel):
 
 class SocialActionCreate(BaseModel):
     target_user_id: str
-    action: str # 'nudge' or 'spot'
+    action: str 
+
+# --- NEW: Admin Schemas ---
+class AdminUserSelect(BaseModel):
+    id: str
+    email: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+class AdminNotificationCreate(BaseModel):
+    target_user_ids: List[str] # List of IDs
+    title: str
+    message: str
+
+class AppMetric(BaseModel):
+    id: str
+    user_id: str
+    last_app_query: datetime
+    total_api_calls: Optional[int] = 0
+    open_ai_calls: Optional[int] = 0
+    rubbish_voice_logs: Optional[int] = 0
+    
+    class Config:
+        from_attributes = True
+
+class AdminMetricResponse(BaseModel):
+    metric: AppMetric
+    user_email: str # Enriched with user info
