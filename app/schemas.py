@@ -1,5 +1,5 @@
 # app/schemas.py
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from datetime import date, datetime
 from typing import Optional, List, Union
 
@@ -214,6 +214,7 @@ class PublicUser(BaseModel):
     can_nudge: bool = True
     can_spot: bool = True
 
+    model_config = ConfigDict(from_attributes=True)
 
 class FriendRequestCreate(BaseModel):
     target_user_id: str

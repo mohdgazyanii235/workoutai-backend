@@ -936,3 +936,13 @@ def get_all_app_metrics(db: Session):
 def get_total_user_count(db: Session) -> int:
     """Count total number of registered users"""
     return db.query(models.User).count()
+
+
+def check_is_friend(db: Session, user_id_1: str, user_id_2: str) -> bool:
+    """Check if two users are friends."""
+    friendship = db.query(models.Friendship).filter(
+        ((models.Friendship.requester_id == user_id_1) & (models.Friendship.addressee_id == user_id_2)) |
+        ((models.Friendship.requester_id == user_id_2) & (models.Friendship.addressee_id == user_id_1)),
+        models.Friendship.status == 'accepted'
+    ).first()
+    return friendship is not None
