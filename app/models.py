@@ -1,6 +1,6 @@
 # app/models.py
 import datetime
-from sqlalchemy import Column, String, DateTime, Float, Integer, ForeignKey, Boolean, Date
+from sqlalchemy import Column, String, DateTime, Float, Integer, ForeignKey, Boolean, Date, PrimaryKeyConstraint
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 from .database import Base
@@ -13,6 +13,21 @@ class Friendship(Base):
     addressee_id = Column(String, ForeignKey('users.id'), nullable=False)
     status = Column(String, default="pending", nullable=False) # "pending", "accepted", "blocked"
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+# --- NEW: Close Friends Association Table ---
+class CloseFriend(Base):
+    __tablename__ = 'close_friends'
+    
+    # The user who owns the list
+    owner_id = Column(String, ForeignKey('users.id'), nullable=False)
+    # The friend they marked as "close"
+    friend_id = Column(String, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('owner_id', 'friend_id'),
+    )
+# --------------------------------------------
 
 class User(Base):
     __tablename__ = 'users'
@@ -52,6 +67,10 @@ class User(Base):
 
     notifications_received = relationship("Notification", foreign_keys="Notification.recipient_id", back_populates="recipient")
     notifications_sent = relationship("Notification", foreign_keys="Notification.sender_id", back_populates="sender")
+
+    # --- NEW: Relationship for Close Friends ---
+    # This allows us to easily query "who has this user marked as a close friend?"
+    close_friends = relationship("CloseFriend", foreign_keys=[CloseFriend.owner_id], backref="owner", cascade="all, delete-orphan")
 
     nudge_count = Column(Integer, default=0, nullable=False)
     spot_count = Column(Integer, default=0, nullable=False)

@@ -214,6 +214,8 @@ class PublicUser(BaseModel):
     can_nudge: bool = True
     can_spot: bool = True
 
+    is_close_friend: bool = False
+
     model_config = ConfigDict(from_attributes=True)
 
 class FriendRequestCreate(BaseModel):

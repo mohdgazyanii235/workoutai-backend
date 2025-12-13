@@ -95,17 +95,17 @@ def update_workout(
     if "workout_type" in update_data:
         db_workout.workout_type = update_data["workout_type"]
 
-    # Create Notifications if switched to public
+    # --- MODIFIED: Handle Notifications for Public AND Close Friends ---
     if "visibility" in update_data:
         old_visibility = db_workout.visibility
-        db_workout.visibility = update_data["visibility"]
+        new_visibility = update_data["visibility"]
+        db_workout.visibility = new_visibility
         
-        # Only notify if switching from private -> public
-        if old_visibility != "public" and update_data["visibility"] == "public":
-            current_user = get_user(db, user_id)
+        current_user = get_user(db, user_id)
+        
+        # Scenario 1: Private -> Public (Notify ALL friends)
+        if old_visibility != "public" and new_visibility == "public":
             friend_id_list = get_friends_id_list(db, user_id)
-            
-            # Send Notification to each friend
             for friend_id in friend_id_list:
                 create_notification(
                     db=db,
@@ -116,6 +116,21 @@ def update_workout(
                     message=f"{current_user.first_name} just shared a workout! Time to spot!",
                     reference_id=db_workout.id
                 )
+        
+        # Scenario 2: Private -> Close Friends (Notify ONLY close friends)
+        elif old_visibility == "private" and new_visibility == "close_friends":
+            close_friend_ids = get_close_friend_ids(db, user_id)
+            for friend_id in close_friend_ids:
+                create_notification(
+                    db=db,
+                    recipient_id=friend_id,
+                    sender_id=user_id,
+                    type="WORKOUT_SHARE",
+                    title="Close Friends Only!",
+                    message=f"{current_user.first_name} shared a workout with close friends.",
+                    reference_id=db_workout.id
+                )
+    # ----------------------------------------------------------------
 
     db.add(db_workout)
 
@@ -204,6 +219,27 @@ def update_workout(
         raise e 
 
 
+# --- MODIFIED: Get Public Workouts (Handles Close Friends Logic) ---
+def get_visible_workouts_for_user(db: Session, target_user_id: str, viewer_id: str, limit: int = 10):
+    """
+    Fetches workouts of target_user_id that are visible to viewer_id.
+    """
+    # 1. Check if viewer is a close friend of target
+    is_close_friend = check_is_close_friend(db, owner_id=target_user_id, friend_id=viewer_id)
+    
+    # 2. Define visibility criteria
+    visible_types = ["public"]
+    if is_close_friend:
+        visible_types.append("close_friends")
+    
+    # 3. Query
+    return db.query(models.Workout).filter(
+        models.Workout.user_id == target_user_id,
+        models.Workout.visibility.in_(visible_types)
+    ).order_by(models.Workout.created_at.desc()).limit(limit).all()
+
+
+# --- DEPRECATED: Old simple function (kept for backward compat if needed, but not used) ---
 def get_public_workouts_for_user(db: Session, user_id: str, limit: int = 10):
     return db.query(models.Workout).filter(
         models.Workout.user_id == user_id,
@@ -263,11 +299,11 @@ def create_workout_from_log(db: Session, log: VoiceLog, user_id: str, created_at
         db.commit()
         db.refresh(db_workout)
         
-        # Create Notifications if Public
+        # --- MODIFIED: Handle Notifications for Public/Close Friends ---
+        current_user = get_user(db, user_id)
+        
         if log.visibility == "public":
-            current_user = get_user(db, user_id)
             friend_ids = get_friends_id_list(db, user_id)
-            
             for friend_id in friend_ids:
                 create_notification(
                     db=db,
@@ -278,6 +314,19 @@ def create_workout_from_log(db: Session, log: VoiceLog, user_id: str, created_at
                     message=f"{current_user.first_name} just crushed a workout! Spot them to show your support.",
                     reference_id=db_workout.id
                 )
+        elif log.visibility == "close_friends":
+            close_friend_ids = get_close_friend_ids(db, user_id)
+            for friend_id in close_friend_ids:
+                create_notification(
+                    db=db,
+                    recipient_id=friend_id,
+                    sender_id=user_id,
+                    type="WORKOUT_SHARE",
+                    title="Close Friends Workout!",
+                    message=f"{current_user.first_name} shared a private workout with you.",
+                    reference_id=db_workout.id
+                )
+        # -------------------------------------------------------------
                 
     except Exception as e:
         db.rollback()
@@ -668,6 +717,13 @@ def remove_friend(db: Session, user_a: str, user_b: str):
 
     if friendship:
         db.delete(friendship)
+        # Also remove any Close Friend links if they exist
+        db.query(models.CloseFriend).filter(
+             or_(
+                and_(models.CloseFriend.owner_id == user_a, models.CloseFriend.friend_id == user_b),
+                and_(models.CloseFriend.owner_id == user_b, models.CloseFriend.friend_id == user_a)
+             )
+        ).delete()
         db.commit()
         return True
     
@@ -688,9 +744,40 @@ def get_friends_id_list(db: Session, user_id: str):
             friend_ids.append(f.requester_id)
     return friend_ids
 
+# --- NEW: Close Friend Helpers ---
+def get_close_friend_ids(db: Session, user_id: str) -> List[str]:
+    results = db.query(models.CloseFriend.friend_id).filter(models.CloseFriend.owner_id == user_id).all()
+    return [r[0] for r in results]
+
+def check_is_close_friend(db: Session, owner_id: str, friend_id: str) -> bool:
+    exists = db.query(models.CloseFriend).filter(
+        models.CloseFriend.owner_id == owner_id,
+        models.CloseFriend.friend_id == friend_id
+    ).first()
+    return exists is not None
+
+def toggle_close_friend(db: Session, owner_id: str, friend_id: str, is_close: bool):
+    # Ensure they are actually friends first
+    if get_friendship_status(db, owner_id, friend_id) != 'accepted':
+        raise ValueError("You must be buddies to add to Close Friends.")
+
+    if is_close:
+        # Add (upsert logic basically, or check exist)
+        if not check_is_close_friend(db, owner_id, friend_id):
+            cf = models.CloseFriend(owner_id=owner_id, friend_id=friend_id)
+            db.add(cf)
+    else:
+        # Remove
+        db.query(models.CloseFriend).filter(
+            models.CloseFriend.owner_id == owner_id,
+            models.CloseFriend.friend_id == friend_id
+        ).delete()
+    
+    db.commit()
+# ---------------------------------
+
 def get_friends(db: Session, user_id: str):
-    """Get all accepted friendships"""
-    # Query friendships where user is either requester or addressee AND status is accepted
+    """Get all accepted friendships with enriched Close Friend status"""
     friendships = db.query(models.Friendship).filter(
         and_(
             or_(models.Friendship.requester_id == user_id, models.Friendship.addressee_id == user_id),
@@ -705,7 +792,19 @@ def get_friends(db: Session, user_id: str):
         else:
             friend_ids.append(f.requester_id)
             
-    return db.query(models.User).filter(models.User.id.in_(friend_ids)).all()
+    users = db.query(models.User).filter(models.User.id.in_(friend_ids)).all()
+    
+    # Inject close friend status manually
+    # Note: We can't modify the SQLAlchemy object 'User' arbitrarily if it's not in the schema.
+    # But since we are returning these to the router which converts to Pydantic,
+    # we can attach attributes to them and Pydantic's `from_attributes=True` will pick them up.
+    
+    close_friend_ids = set(get_close_friend_ids(db, user_id))
+    
+    for u in users:
+        u.is_close_friend = (u.id in close_friend_ids)
+        
+    return users
 
 def search_users(db: Session, query: str, current_user_id: str):
     """Search users by name/email, excluding self"""

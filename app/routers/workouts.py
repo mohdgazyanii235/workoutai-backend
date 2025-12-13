@@ -109,7 +109,7 @@ def create_workout_manual(
         raise HTTPException(status_code=500, detail=f"Failed to create workout: {e}")
 
 
-# --- NEW ENDPOINT ---
+# --- MODIFIED: Fetch User Workouts with Close Friends Logic ---
 @router.get("/user/{user_id}", response_model=List[schemas.Workout])
 def get_user_public_workouts(
     user_id: str,
@@ -117,11 +117,20 @@ def get_user_public_workouts(
     db: Session = Depends(get_db)
 ):
     """
-    Fetch public workouts for a specific user (e.g., a friend).
+    Fetch visible workouts for a specific user.
+    If 'public': visible to friends.
+    If 'close_friends': visible only if viewer is a close friend.
     """
-    workouts = []
-    if(crud.get_friendship_status(db, user_id, current_user.id) == 'accepted'):
-        workouts = crud.get_public_workouts_for_user(db, user_id)
+    # 1. Ensure they are friends
+    if crud.get_friendship_status(db, user_id, current_user.id) != 'accepted':
+        return []
+
+    # 2. Use new logic to fetch visible workouts
+    workouts = crud.get_visible_workouts_for_user(
+        db=db, 
+        target_user_id=user_id, 
+        viewer_id=current_user.id
+    )
     return workouts
 # --------------------
 
@@ -133,27 +142,37 @@ def get_public_workout_detail(
     current_user: schemas.User = Depends(get_current_user),
 ):
     """
-    Fetch a workout specifically for public viewing.
-    Enforces visibility='public' and strips sensitive data like notes.
+    Fetch a workout specifically for public/shared viewing.
+    Enforces visibility permissions.
     """
-    workout = (
-        db.query(models.Workout)
-        .filter(
-            models.Workout.id == workout_id,
-            models.Workout.visibility == 'public'
-        )
-        .first()
-    )
+    workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
     
     if not workout:
-        # We return 404 if it's private or doesn't exist, to avoid leaking existence of private workouts
-        raise HTTPException(status_code=404, detail="Workout not found or is private")
+        raise HTTPException(status_code=404, detail="Workout not found")
+
+    # Access Logic:
+    # 1. If Owner -> Allow
+    if workout.user_id == current_user.id:
+        return workout
+
+    # 2. Check Friendship
+    is_friend = crud.get_friendship_status(db, workout.user_id, current_user.id) == 'accepted'
+    if not is_friend:
+         raise HTTPException(status_code=403, detail="You are not buddies with the workout owner.")
+
+    # 3. Check Visibility
+    if workout.visibility == 'public':
+        workout.notes = None # Strip sensitive info
+        return workout
+        
+    elif workout.visibility == 'close_friends':
+        is_close = crud.check_is_close_friend(db, owner_id=workout.user_id, friend_id=current_user.id)
+        if is_close:
+            workout.notes = None
+            return workout
+        else:
+             raise HTTPException(status_code=403, detail="This workout is restricted to Close Friends.")
     
-    # --- Security: Explicitly remove notes ---
-    # SQLAlchemy models are mutable, so we can modify the instance before serialization
-    # However, to avoid accidentally committing this change to DB, we rely on Pydantic serialization
-    # passing a modified object.
-    workout.notes = None 
-    
-    return workout
+    # 4. Private -> Deny
+    raise HTTPException(status_code=404, detail="Workout is private")
 # -----------------------------------------------------------

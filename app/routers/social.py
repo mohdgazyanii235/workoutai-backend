@@ -4,7 +4,7 @@ from typing import List, Annotated
 from app import schemas, crud, models
 from app.database import get_db
 from app.auth.auth_service import get_current_user
-from ..security.security import get_api_key, get_current_user
+from app.security.security import get_api_key
 
 router = APIRouter(
     prefix="/social",
@@ -66,6 +66,7 @@ def get_my_friends(
     current_user: Annotated[schemas.User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
+    # This now returns users with 'is_close_friend' populated
     friends = crud.get_friends(db, current_user.id)
     
     public_friends = []
@@ -87,7 +88,9 @@ def get_my_friends(
             is_friend=True,
             consistency_score=crud.calculate_consistency_score(user.workouts),
             total_workouts=len(user.workouts),
-            created_at=user.created_at
+            created_at=user.created_at,
+            # --- NEW: Map close friend status ---
+            is_close_friend=getattr(user, 'is_close_friend', False)
         ))
     return public_friends
 
@@ -125,20 +128,6 @@ def get_incoming_requests(
         ))
     return public_requesters
 
-@router.get("/friends", response_model=List[schemas.PublicUser])
-def get_friends(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    friends = crud.get_friends(db, current_user.id)
-    results = []
-    for f in friends:
-        u_schema = schemas.PublicUser.model_validate(f)
-        u_schema.friendship_status = 'accepted'
-        u_schema.is_friend = True
-        results.append(u_schema)
-    return results
-
 # --- NEW: Get Friends of a Specific User ---
 @router.get("/friends/{user_id}", response_model=List[schemas.PublicUser])
 def get_friends_of_user(
@@ -148,24 +137,26 @@ def get_friends_of_user(
 ):
     # 1. Allow if querying own friends
     if str(current_user.id) == user_id:
-        friends = crud.get_friends(db, current_user.id)
+        # Use get_my_friends logic (via CRUD) to see your own close friends
+        return get_my_friends(current_user, db)
     
     # 2. Allow if querying a friend's friends
     elif crud.check_is_friend(db, current_user.id, user_id):
         friends = crud.get_friends(db, user_id)
+        results = []
+        for f in friends:
+            u_schema = schemas.PublicUser.model_validate(f)
+            # Calculate relationship status relative to CURRENT USER
+            u_schema.friendship_status = crud.get_friendship_status(db, current_user.id, str(f.id))
+            u_schema.is_friend = (u_schema.friendship_status == 'accepted')
+            # You CANNOT see if they are close friends with the target user (Privacy)
+            u_schema.is_close_friend = False 
+            results.append(u_schema)
+        return results
     
     # 3. Block otherwise
     else:
         raise HTTPException(status_code=403, detail="You must be buddies to see their friends list.")
-
-    results = []
-    for f in friends:
-        u_schema = schemas.PublicUser.model_validate(f)
-        # We need to calculate friendship status relative to the *Current User*
-        u_schema.friendship_status = crud.get_friendship_status(db, current_user.id, str(f.id))
-        u_schema.is_friend = (u_schema.friendship_status == 'accepted')
-        results.append(u_schema)
-    return results
 
 @router.put("/request/{requester_id}")
 def respond_to_user_request(
@@ -189,3 +180,49 @@ def respond_to_user_request(
          raise HTTPException(status_code=400, detail="Failed to update request")
          
     return {"message": f"Request {action}ed"}
+
+@router.delete("/friends/{target_user_id}")
+def remove_friend(
+    target_user_id: str,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    success = crud.remove_friend(db, current_user.id, target_user_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="Friendship not found or could not be removed.")
+    return {"message": "Friend removed."}
+
+# --- NEW: Close Friends Endpoints ---
+@router.post("/action", response_model=dict)
+def perform_social_action(
+    payload: schemas.SocialActionCreate,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    try:
+        crud.perform_social_action(db, current_user.id, payload.target_user_id, payload.action)
+        return {"message": "Action successful"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/close-friends/{target_user_id}")
+def add_close_friend(
+    target_user_id: str,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    print(target_user_id)
+    try:
+        crud.toggle_close_friend(db, current_user.id, target_user_id, is_close=True)
+        return {"message": "Added to Close Friends"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.delete("/close-friends/{target_user_id}")
+def remove_close_friend(
+    target_user_id: str,
+    current_user: Annotated[schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    crud.toggle_close_friend(db, current_user.id, target_user_id, is_close=False)
+    return {"message": "Removed from Close Friends"}
