@@ -2,30 +2,33 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import Annotated
-from app import schemas, crud
 from app.database import get_db
 from app.auth import auth_service
 from app.security.security import get_api_key
 import random
 import logging
 
+from app.schemas import user as user_schemas
+from app.schemas import auth as auth_schemas
+from app.crud import user as user_crud
+from app.crud import auth as auth_crud
+
 router = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(get_api_key)])
 
-# --- Your existing /signup and /token endpoints ---
-@router.post("/signup", response_model=schemas.User)
-def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = crud.get_user_by_email(db, email=user.email)
+@router.post("/signup", response_model=user_schemas.User)
+def signup(user: user_schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = user_crud.get_user_by_email(db, email=user.email)
     if db_user:
         print("Email Already Registered.")
         raise HTTPException(status_code=400, detail="Email already registered")
-    return crud.create_user(db=db, user=user)
+    return user_crud.create_user(db=db, user=user)
 
-@router.post("/token", response_model=schemas.Token)
+@router.post("/token", response_model=auth_schemas.Token)
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()], 
     db: Session = Depends(get_db)
 ):
-    user = crud.get_user_by_email(db, email=form_data.username)
+    user = user_crud.get_user_by_email(db, email=form_data.username)
     if not user or not user.password_hash or not auth_service.verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -37,17 +40,17 @@ async def login_for_access_token(
 
 @router.post("/request-otp")
 def request_password_reset(
-    request_data: schemas.ForgotPasswordRequest, 
+    request_data: auth_schemas.ForgotPasswordRequest, 
     db: Session = Depends(get_db)
 ):
     """
     User requests a password reset.
     """
-    db_user = crud.get_user_by_email(db, email=request_data.email)
+    db_user = user_crud.get_user_by_email(db, email=request_data.email)
     
     if db_user:
         otp_code = str(random.randint(100000, 999999))
-        crud.create_reset_otp(db, user=db_user, otp_code=otp_code)
+        auth_crud.create_reset_otp(db, user=db_user, otp_code=otp_code)
         
         # Send email will go here!
         logging.info(f"OTP for {db_user.email}: {otp_code}")
@@ -57,13 +60,13 @@ def request_password_reset(
 
 @router.post("/verify-otp")
 def verify_reset_otp(
-    request_data: schemas.VerifyOTPRequest, 
+    request_data: auth_schemas.VerifyOTPRequest, 
     db: Session = Depends(get_db)
 ):
     """
     User submits the OTP to verify it's valid before proceeding.
     """
-    db_otp = crud.get_valid_otp(
+    db_otp = auth_crud.get_valid_otp(
         db, 
         email=request_data.email, 
         otp_code=request_data.otp
@@ -79,14 +82,14 @@ def verify_reset_otp(
 
 @router.post("/reset-password")
 def reset_password_with_otp(
-    request_data: schemas.ResetPasswordRequest, 
+    request_data: auth_schemas.ResetPasswordRequest, 
     db: Session = Depends(get_db)
 ):
     """
     User submits the OTP *and* new password to finalize the reset.
     """
     # 1. Verify the OTP is valid (re-verification step)
-    db_otp = crud.get_valid_otp(
+    db_otp = auth_crud.get_valid_otp(
         db, 
         email=request_data.email, 
         otp_code=request_data.otp
@@ -99,13 +102,13 @@ def reset_password_with_otp(
         )
         
     # 2. Update the user's password
-    crud.update_user_password(
+    auth_crud.update_user_password(
         db, 
         user=db_otp.user, 
         new_password=request_data.new_password
     )
     
     # 3. Delete the used OTP
-    crud.delete_otp(db, db_otp=db_otp)
+    auth_crud.delete_otp(db, db_otp=db_otp)
     
     return {"message": "Password has been reset successfully."}

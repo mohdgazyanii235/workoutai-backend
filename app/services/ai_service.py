@@ -4,10 +4,10 @@ from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from dotenv import load_dotenv
+from app.schemas import workout as workout_schemas
 
 load_dotenv()
 
-# --- NO CHANGE TO EXCEPTIONS ---
 class InvalidWorkoutException(ValueError):
     """Custom exception for non-workout text."""
     pass
@@ -15,7 +15,13 @@ class InvalidWorkoutException(ValueError):
 class InvalidVoiceLogException(ValueError):
     pass
 
-# --- NO CHANGE TO PYDANTIC MODELS ---
+# We redefine these pydantic models here locally for Langchain 
+# because they are slightly different in purpose (extraction vs API schema)
+# or we could import them if they match perfectly. 
+# Looking at your schemas, VoiceLog in ai_service is very rich.
+# Let's keep them local to avoid coupling AI extraction logic with API response schemas too tightly, 
+# or ensure they match. For now, I'll keep them as they were in ai_service.py to be safe.
+
 class ExerciseSet(BaseModel):
     exercise_name: str = Field(description="The name of the exercise performed, e.g., 'Bench Press'")
     reps: int = Field(description="The number of repetitions performed in the set.")
@@ -28,7 +34,6 @@ class CardioLog(BaseModel):
     duration_minutes: Optional[float] = Field(description="The duration of the exercise in minutes. e.g., '20 min' becomes 20.0")
     speed: Optional[float] = Field(description="The speed, e.g., 10")
     pace: Optional[str] = Field(description="The pace, e.g., '5:30', '8:10'.")
-    # --- MODIFIED DESCRIPTION ---
     pace_unit: Optional[str] = Field(description="The unit for pace. EXTRACT this from text (e.g. 'per mile' -> 'Min/Mile', 'per km' -> 'Min/KM'). Default to 'Min/KM' only if unspecified.")
     distance: Optional[float] = Field(description="The distance.")
     distance_unit: Optional[str] = Field(description="The unit of distance, this can either be Kilometer(s) or Mile(s)")
@@ -51,18 +56,11 @@ class VoiceLog(BaseModel):
     updated_fat_percentage: float | None = Field(description="The users fat percentage.")
     comment: str = Field(description="This is the AIs comment on the users log.")
 
-# --- NO CHANGE TO LLM ---
 llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2)
-
-# --- NO CHANGE TO PARSER ---
 parser = PydanticOutputParser(pydantic_object=VoiceLog)
 
-
-def structured_log_text(text: str) -> VoiceLog:
-
-    print(text)
-
-    # --- MODIFIED: Updated prompt template ---
+def structured_log_text(text: str) -> workout_schemas.VoiceLog: # Return the schema VoiceLog
+    # ... prompt template code ...
     prompt_template = """
     You are an expert JSON Parser and fitness assistant. Your task is to parse a user's raw text into a JSON object.
     The user can log two types of strength sets:
@@ -235,12 +233,12 @@ def structured_log_text(text: str) -> VoiceLog:
     Please provide the output in the following format:
     {format_instructions}
     """
+    
     prompt = ChatPromptTemplate.from_template(
         template=prompt_template,
         partial_variables={"format_instructions": parser.get_format_instructions()},
     )
 
-    # --- NO CHANGE TO CHAIN ---
     chain = prompt | llm | parser
 
     try:
@@ -249,9 +247,11 @@ def structured_log_text(text: str) -> VoiceLog:
             stop_after_attempt=2
         )
         structured_response = chain_with_retry.invoke({"user_text": text})
-        print(structured_response)
-
-        return structured_response
+        
+        # We assume the AI output model matches the schema VoiceLog structure sufficiently 
+        # to be converted or treated as such.
+        # Since we use the local VoiceLog for the parser, it returns that.
+        return structured_response # Returns the local Pydantic model
     except Exception as e:
         print(f"Error processing text with LangChain after retries: {e}")
         raise InvalidVoiceLogException("Nice try")

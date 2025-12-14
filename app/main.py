@@ -1,19 +1,16 @@
-# app/main.py
-from fastapi import FastAPI
-from app import models, crud # Added crud import
-from app.database import engine, SessionLocal # Added SessionLocal import
+from fastapi import FastAPI, Request
+from app import models
+from app.database import engine, SessionLocal
 from app.routers import log, auth, users, workouts, templates, social, notifications, admin
-import time # <-- Import time
-from fastapi import FastAPI, Request # <-- Import Request
+import time
 import os
 from dotenv import load_dotenv
 import json
-import uvicorn
 from starlette.middleware.sessions import SessionMiddleware
 import logging
 import sys
-from app.auth import auth_service # Added auth_service import
-
+from app.auth import auth_service
+from app.crud import admin as admin_crud
 
 load_dotenv()
 
@@ -23,7 +20,7 @@ log_formatter = logging.Formatter(
     fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt=date_format_string
 )
-log_file_handler = logging.FileHandler(os.getenv("LOG_FILE"))
+log_file_handler = logging.FileHandler(os.getenv("LOG_FILE", "app.log")) # Default to app.log if not set
 log_file_handler.setFormatter(log_formatter)
 log_stream_handler = logging.StreamHandler(sys.stdout)
 log_stream_handler.setFormatter(log_formatter)
@@ -41,7 +38,6 @@ except Exception as e:
     raise
 
 app = FastAPI()
-
 
 # --- Request Logging Middleware ---
 @app.middleware("http")
@@ -76,7 +72,7 @@ async def log_requests(request: Request, call_next):
                 # Create a new DB session just for this logging operation
                 db = SessionLocal()
                 try:
-                    crud.log_app_metric(db, user_id)
+                    admin_crud.log_app_metric(db, user_id)
                 finally:
                     db.close()
         except Exception as e:
@@ -93,9 +89,10 @@ async def log_requests(request: Request, call_next):
         f"{request.method} {request.url.path} "
         f"Status: {response.status_code} "
         f"Processing Time: {process_time:.4f}s "
-        f"Request Body: {json.dumps(request_body_log)}" # Log the captured body
+        f"Request Body: {json.dumps(request_body_log)}" 
     )
     return response
+
 app.include_router(auth.router)
 app.include_router(log.router)
 app.include_router(users.router)
