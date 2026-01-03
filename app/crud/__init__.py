@@ -6,3 +6,4 @@ from .template import *
 from .workout import *
 from .auth import *
 from .admin import *
+from .analytics import * # Added

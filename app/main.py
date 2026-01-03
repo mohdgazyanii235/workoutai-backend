@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from app import models
 from app.database import engine, SessionLocal
-from app.routers import log, auth, users, workouts, templates, social, notifications, admin
+from app.routers import log, auth, users, workouts, templates, social, notifications, admin, analytics # <-- Added analytics
 import time
 import os
 from dotenv import load_dotenv
@@ -20,7 +20,7 @@ log_formatter = logging.Formatter(
     fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt=date_format_string
 )
-log_file_handler = logging.FileHandler(os.getenv("LOG_FILE", "app.log")) # Default to app.log if not set
+log_file_handler = logging.FileHandler(os.getenv("LOG_FILE", "app.log"))
 log_file_handler.setFormatter(log_formatter)
 log_stream_handler = logging.StreamHandler(sys.stdout)
 log_stream_handler.setFormatter(log_formatter)
@@ -101,6 +101,7 @@ app.include_router(templates.router)
 app.include_router(social.router)
 app.include_router(notifications.router)
 app.include_router(admin.router)
+app.include_router(analytics.router) # <-- Register Router
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 
 @app.get("/")

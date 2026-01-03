@@ -14,20 +14,47 @@ class Friendship(Base):
     status = Column(String, default="pending", nullable=False) # "pending", "accepted", "blocked"
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-# --- NEW: Close Friends Association Table ---
 class CloseFriend(Base):
     __tablename__ = 'close_friends'
     
-    # The user who owns the list
     owner_id = Column(String, ForeignKey('users.id'), nullable=False)
-    # The friend they marked as "close"
     friend_id = Column(String, ForeignKey('users.id'), nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     __table_args__ = (
         PrimaryKeyConstraint('owner_id', 'friend_id'),
     )
-# --------------------------------------------
+
+class HealthDaily(Base):
+    __tablename__ = 'health_daily'
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey('users.id'), nullable=False, index=True)
+    date = Column(Date, nullable=False, index=True) # The specific day (YYYY-MM-DD)
+
+    # Activity Metrics
+    steps = Column(Integer, default=0)
+    active_calories = Column(Float, default=0.0)
+    exercise_minutes = Column(Integer, default=0)
+    physical_effort_score = Column(Float, nullable=True) # proprietary or HK derived
+
+    # Recovery Metrics
+    resting_hr = Column(Float, nullable=True)
+    avg_heart_rate = Column(Float, nullable=True) # --- NEW: Average HR for the day ---
+    hrv = Column(Float, nullable=True) # Heart Rate Variability (ms)
+    walking_hr_avg = Column(Float, nullable=True)
+    vo2_max = Column(Float, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    # Ensure one record per user per day
+    __table_args__ = (
+        # complex unique constraint is handled better via logic or specific index
+    )
+    
+    user = relationship("User", back_populates="daily_health")
+# ------------------------------------------------
 
 class User(Base):
     __tablename__ = 'users'
@@ -36,7 +63,6 @@ class User(Base):
     password_hash = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-    # Profile fields
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     date_of_birth = Column(Date, nullable=True)
@@ -46,7 +72,6 @@ class User(Base):
     bio = Column(String, nullable=True)
     profile_photo_url = Column(String, nullable=True)
 
-    # Strenght Information
     weight = Column(JSON, default=list, nullable=True)
     height = Column(Float, nullable=True)
     fat_percentage = Column(JSON, default=list, nullable=True)
@@ -54,7 +79,6 @@ class User(Base):
     squat_1rm = Column(JSON, default=list, nullable=True)
     bench_1rm = Column(JSON, default=list, nullable=True)
 
-    # Goals
     goal_weight = Column(Float, nullable=True)
     goal_fat_percentage = Column(Float, nullable=True)
     goal_deadlift_1rm = Column(Float, nullable=True)
@@ -68,9 +92,9 @@ class User(Base):
     notifications_received = relationship("Notification", foreign_keys="Notification.recipient_id", back_populates="recipient")
     notifications_sent = relationship("Notification", foreign_keys="Notification.sender_id", back_populates="sender")
 
-    # --- NEW: Relationship for Close Friends ---
-    # This allows us to easily query "who has this user marked as a close friend?"
     close_friends = relationship("CloseFriend", foreign_keys=[CloseFriend.owner_id], backref="owner", cascade="all, delete-orphan")
+    
+    daily_health = relationship("HealthDaily", back_populates="user", cascade="all, delete-orphan")
 
     nudge_count = Column(Integer, default=0, nullable=False)
     spot_count = Column(Integer, default=0, nullable=False)
@@ -111,17 +135,16 @@ class ExerciseSet(Base):
 class CardioSession(Base):
     __tablename__ = 'cardio_sessions'
     id = Column(String, primary_key=True, index=True)
-    name = Column(String, nullable=False) # e.g., "Running", "Rowing"
+    name = Column(String, nullable=False)
     
-    # We will store duration in minutes for consistency
     duration_minutes = Column(Float, nullable=True) 
     
     distance = Column(Float, nullable=True) 
-    distance_unit = Column(String, nullable=True) # e.g., "km", "miles"
+    distance_unit = Column(String, nullable=True)
     
     speed = Column(Float, nullable=True)
     pace = Column(String, nullable=True)
-    pace_unit = Column(String, nullable=True) # e.g., "Min/KM", "Min/Mile"
+    pace_unit = Column(String, nullable=True)
     laps = Column(Integer, nullable=True)
     
     workout_id = Column(String, ForeignKey('workouts.id'))
@@ -141,7 +164,6 @@ class WorkoutTemplate(Base):
     __tablename__ = 'workout_templates'
     id = Column(String, primary_key=True, index=True)
     template_name = Column(String, nullable=False, unique=True, index=True)
-    # Store list of exercise names directly
     exercise_names = Column(JSON, nullable=False, default=list)
 
 
@@ -161,10 +183,10 @@ class Notification(Base):
     
     id = Column(String, primary_key=True, index=True)
     recipient_id = Column(String, ForeignKey('users.id'), nullable=False, index=True)
-    sender_id = Column(String, ForeignKey('users.id'), nullable=True) # Nullable for system messages
+    sender_id = Column(String, ForeignKey('users.id'), nullable=True)
     
-    type = Column(String, nullable=False) # 'FRIEND_REQUEST', 'WORKOUT_SHARE', 'SYSTEM'
-    reference_id = Column(String, nullable=True) # ID of the related object (e.g., friendship_id, workout_id)
+    type = Column(String, nullable=False)
+    reference_id = Column(String, nullable=True)
     
     title = Column(String, nullable=False)
     message = Column(String, nullable=False)
@@ -181,5 +203,5 @@ class UserInteraction(Base):
     id = Column(String, primary_key=True, index=True)
     sender_id = Column(String, ForeignKey('users.id'), nullable=False, index=True)
     recipient_id = Column(String, ForeignKey('users.id'), nullable=False)
-    action_type = Column(String, nullable=False) # 'nudge' or 'spot'
+    action_type = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
