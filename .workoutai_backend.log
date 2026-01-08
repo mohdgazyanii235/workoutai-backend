@@ -14199,3 +14199,148 @@
 08th January 2026 22:15:12 - root - INFO - Application starting up...
 08th January 2026 22:15:12 - root - INFO - Database tables created successfully.
 08th January 2026 22:15:12 - root - INFO - Application setup complete.
+08th January 2026 22:15:40 - root - INFO - Application starting up...
+08th January 2026 22:15:40 - root - INFO - Database tables created successfully.
+08th January 2026 22:15:40 - root - INFO - Application setup complete.
+08th January 2026 22:19:15 - root - INFO - Application starting up...
+08th January 2026 22:19:15 - root - INFO - Database tables created successfully.
+08th January 2026 22:19:15 - root - INFO - Application setup complete.
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - GET /admin/metrics Status: 200 Processing Time: 0.0028s Request Body: {}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: GET http://testserver/admin/metrics "HTTP/1.1 200 OK"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - GET /admin/metrics Status: 403 Processing Time: 0.0014s Request Body: {}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: GET http://testserver/admin/metrics "HTTP/1.1 403 Forbidden"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - GET /admin/stats/users/count Status: 200 Processing Time: 0.0024s Request Body: {}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: GET http://testserver/admin/stats/users/count "HTTP/1.1 200 OK"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - GET /admin/users Status: 200 Processing Time: 0.0035s Request Body: {}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: GET http://testserver/admin/users "HTTP/1.1 200 OK"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - POST /admin/notify Status: 200 Processing Time: 0.0028s Request Body: {"target_user_ids": ["u1", "u2"], "title": "Alert", "message": "Update"}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: POST http://testserver/admin/notify "HTTP/1.1 200 OK"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - POST /analytics/sync Status: 200 Processing Time: 0.0054s Request Body: {"date": "2023-01-01", "steps": 10000, "active_calories": 500.0}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: POST http://testserver/analytics/sync "HTTP/1.1 200 OK"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - POST /analytics/sync Status: 422 Processing Time: 0.0025s Request Body: {"steps": 10000}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: POST http://testserver/analytics/sync "HTTP/1.1 422 Unprocessable Entity"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - GET /analytics/day/2023-01-01 Status: 200 Processing Time: 0.0023s Request Body: {}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: GET http://testserver/analytics/day/2023-01-01 "HTTP/1.1 200 OK"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - GET /analytics/dashboard Status: 200 Processing Time: 0.0042s Request Body: {}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: GET http://testserver/analytics/dashboard "HTTP/1.1 200 OK"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - GET /analytics/exercise/Bench Status: 200 Processing Time: 0.0027s Request Body: {}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: GET http://testserver/analytics/exercise/Bench "HTTP/1.1 200 OK"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - GET /analytics/history Status: 200 Processing Time: 0.0032s Request Body: {}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: GET http://testserver/analytics/history "HTTP/1.1 200 OK"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - POST /auth/signup Status: 200 Processing Time: 0.0048s Request Body: {"email": "new@test.com", "password": "pass"}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: POST http://testserver/auth/signup "HTTP/1.1 200 OK"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - POST /auth/signup Status: 400 Processing Time: 0.0029s Request Body: {"email": "exists@test.com", "password": "pass"}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: POST http://testserver/auth/signup "HTTP/1.1 400 Bad Request"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - POST /auth/token Status: 200 Processing Time: 0.0059s Request Body: {"error": "Could not decode request body as JSON"}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: POST http://testserver/auth/token "HTTP/1.1 200 OK"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - POST /auth/token Status: 401 Processing Time: 0.0038s Request Body: {"error": "Could not decode request body as JSON"}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: POST http://testserver/auth/token "HTTP/1.1 401 Unauthorized"
+08th January 2026 22:19:15 - root - INFO - Request: testclient:50000 - POST /auth/token Status: 401 Processing Time: 0.0058s Request Body: {"error": "Could not decode request body as JSON"}
+08th January 2026 22:19:15 - httpx - INFO - HTTP Request: POST http://testserver/auth/token "HTTP/1.1 401 Unauthorized"
+08th January 2026 22:19:16 - root - INFO - OTP for test@test.com: 250163
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /auth/request-otp Status: 200 Processing Time: 0.0052s Request Body: {"email": "test@test.com"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/auth/request-otp "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /auth/verify-otp Status: 200 Processing Time: 0.0044s Request Body: {"email": "test@test.com", "otp": "123456"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/auth/verify-otp "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /auth/verify-otp Status: 400 Processing Time: 0.0022s Request Body: {"email": "test@test.com", "otp": "123456"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/auth/verify-otp "HTTP/1.1 400 Bad Request"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /auth/reset-password Status: 200 Processing Time: 0.0050s Request Body: {"email": "test@test.com", "otp": "123456", "new_password": "newpass123"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/auth/reset-password "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /log/voice Status: 200 Processing Time: 0.0036s Request Body: {"text": "I did bench press 12 reps 50kg, 10 reps 60kg, 8 reps 70kg"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/log/voice "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /log/voice Status: 200 Processing Time: 0.0037s Request Body: {"text": "I did 3 sets of 10 squats at 100kg"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/log/voice "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /log/voice Status: 200 Processing Time: 0.0026s Request Body: {"text": "Ran 2 miles then did 3 sets of bench press"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/log/voice "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /log/voice Status: 200 Processing Time: 0.0029s Request Body: {"text": "My new weight is 75kg, body fat 15%, bench 1rm is 100kg"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/log/voice "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /log/voice Status: 200 Processing Time: 0.0026s Request Body: {"text": "Hi how is the weather"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/log/voice "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /log/voice Status: 400 Processing Time: 0.0024s Request Body: {"text": "garbage"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/log/voice "HTTP/1.1 400 Bad Request"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /notifications/ Status: 200 Processing Time: 0.0022s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/notifications/ "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - PATCH /notifications/n1/read Status: 200 Processing Time: 0.0025s Request Body: {"error": "Could not decode request body as JSON"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: PATCH http://testserver/notifications/n1/read "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - PATCH /notifications/n1/read Status: 404 Processing Time: 0.0021s Request Body: {"error": "Could not decode request body as JSON"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: PATCH http://testserver/notifications/n1/read "HTTP/1.1 404 Not Found"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /notifications/mark-all-read Status: 200 Processing Time: 0.0028s Request Body: {"error": "Could not decode request body as JSON"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/notifications/mark-all-read "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /social/search Status: 200 Processing Time: 0.0021s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/social/search?query=ab "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /social/search Status: 200 Processing Time: 0.0026s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/social/search?query=Bob "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /social/request Status: 200 Processing Time: 0.0034s Request Body: {"target_user_id": "u2"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/social/request "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /social/request Status: 400 Processing Time: 0.0023s Request Body: {"target_user_id": "u1"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/social/request "HTTP/1.1 400 Bad Request"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - PUT /social/request/u2 Status: 200 Processing Time: 0.0028s Request Body: {"error": "Could not decode request body as JSON"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: PUT http://testserver/social/request/u2?action=accept "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - PUT /social/request/u2 Status: 404 Processing Time: 0.0023s Request Body: {"error": "Could not decode request body as JSON"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: PUT http://testserver/social/request/u2?action=accept "HTTP/1.1 404 Not Found"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /social/friends Status: 200 Processing Time: 0.0031s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/social/friends "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /social/friends/u2 Status: 200 Processing Time: 0.0024s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/social/friends/u2 "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /social/friends/u2 Status: 403 Processing Time: 0.0019s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/social/friends/u2 "HTTP/1.1 403 Forbidden"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /social/action Status: 200 Processing Time: 0.0028s Request Body: {"target_user_id": "u2", "action": "nudge"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/social/action "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /social/action Status: 400 Processing Time: 0.0028s Request Body: {"target_user_id": "u2", "action": "nudge"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/social/action "HTTP/1.1 400 Bad Request"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /social/close-friends/u2 Status: 200 Processing Time: 0.0024s Request Body: {"error": "Could not decode request body as JSON"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/social/close-friends/u2 "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /social/close-friends/u2 Status: 400 Processing Time: 0.0032s Request Body: {"error": "Could not decode request body as JSON"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/social/close-friends/u2 "HTTP/1.1 400 Bad Request"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /templates/suggestions Status: 200 Processing Time: 0.0024s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/templates/suggestions "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /templates/suggestions Status: 200 Processing Time: 0.0021s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/templates/suggestions?query=chest "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /templates/ Status: 200 Processing Time: 0.0019s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/templates/?template_name=Chest%20A "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /templates/ Status: 200 Processing Time: 0.0023s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/templates/?template_name=Unknown "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /users/me Status: 200 Processing Time: 0.0031s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/users/me "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /users/me Status: 404 Processing Time: 0.0018s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/users/me "HTTP/1.1 404 Not Found"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - PUT /users/me Status: 200 Processing Time: 0.0080s Request Body: {"first_name": "Updated"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: PUT http://testserver/users/me "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /users/u2/public Status: 200 Processing Time: 0.0032s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/users/u2/public "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /users/bad_id/public Status: 404 Processing Time: 0.0021s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/users/bad_id/public "HTTP/1.1 404 Not Found"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /workouts/ Status: 200 Processing Time: 0.0038s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/workouts/ "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /workouts/w1 Status: 200 Processing Time: 0.0029s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/workouts/w1 "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /workouts/non-existent Status: 404 Processing Time: 0.0029s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/workouts/non-existent "HTTP/1.1 404 Not Found"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - DELETE /workouts/w1 Status: 200 Processing Time: 0.0024s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: DELETE http://testserver/workouts/w1 "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - DELETE /workouts/w1 Status: 404 Processing Time: 0.0021s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: DELETE http://testserver/workouts/w1 "HTTP/1.1 404 Not Found"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - PUT /workouts/w1 Status: 200 Processing Time: 0.0044s Request Body: {"notes": "Updated notes", "visibility": "public"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: PUT http://testserver/workouts/w1 "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - PUT /workouts/w1 Status: 404 Processing Time: 0.0023s Request Body: {"notes": "Updated notes"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: PUT http://testserver/workouts/w1 "HTTP/1.1 404 Not Found"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - PUT /workouts/w1 Status: 500 Processing Time: 0.0034s Request Body: {"notes": "Updated notes"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: PUT http://testserver/workouts/w1 "HTTP/1.1 500 Internal Server Error"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /workouts Status: 200 Processing Time: 0.0024s Request Body: {"notes": "New workout", "workout_type": "Strength", "sets": []}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/workouts "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - POST /workouts Status: 500 Processing Time: 0.0024s Request Body: {"notes": "New workout"}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: POST http://testserver/workouts "HTTP/1.1 500 Internal Server Error"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /workouts/user/target-u1 Status: 200 Processing Time: 0.0023s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/workouts/user/target-u1 "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /workouts/user/target-u1 Status: 200 Processing Time: 0.0024s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/workouts/user/target-u1 "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /workouts/public/w1 Status: 200 Processing Time: 0.0031s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/workouts/public/w1 "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /workouts/public/w1 Status: 403 Processing Time: 0.0022s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/workouts/public/w1 "HTTP/1.1 403 Forbidden"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /workouts/public/w1 Status: 200 Processing Time: 0.0030s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/workouts/public/w1 "HTTP/1.1 200 OK"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /workouts/public/w1 Status: 403 Processing Time: 0.0022s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/workouts/public/w1 "HTTP/1.1 403 Forbidden"
+08th January 2026 22:19:16 - root - INFO - Request: testclient:50000 - GET /workouts/public/w1 Status: 404 Processing Time: 0.0037s Request Body: {}
+08th January 2026 22:19:16 - httpx - INFO - HTTP Request: GET http://testserver/workouts/public/w1 "HTTP/1.1 404 Not Found"
