@@ -17,8 +17,8 @@ class ExerciseSet(BaseModel):
     reps: int
     weight: float
     weight_unit: str
-    class Config:
-        from_attributes = True
+    
+    model_config = ConfigDict(from_attributes=True)
 
 class CardioSession(BaseModel):
     id: str
@@ -31,8 +31,7 @@ class CardioSession(BaseModel):
     pace_unit: Optional[str] = None
     laps: Optional[int] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class WorkoutBase(BaseModel):
     id: str
@@ -40,8 +39,8 @@ class WorkoutBase(BaseModel):
     workout_type: Optional[str] = None
     created_at: datetime
     visibility: str = "private" 
-    class Config:
-        from_attributes = True
+    
+    model_config = ConfigDict(from_attributes=True)
 
 class Workout(WorkoutBase):
     user_id: str
@@ -85,13 +84,11 @@ class Exercise(BaseModel):
     exercise_name: str
     workout_types: List[str]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class WorkoutTemplate(BaseModel):
     id: str
     template_name: str
     exercise_names: List[str]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
