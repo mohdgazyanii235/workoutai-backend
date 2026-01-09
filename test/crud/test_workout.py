@@ -1,9 +1,13 @@
 import pytest
 from unittest.mock import MagicMock, patch
 import uuid
+import datetime
+from datetime import timezone, timedelta
 from app import models
 from app.crud import workout as crud_workout
 from app.schemas import workout as workout_schemas
+from pydantic import BaseModel
+from typing import List, Optional
 
 # --- Test Data Generators ---
 
@@ -22,6 +26,37 @@ def generate_workout_create_schema():
         ],
         cardio_sessions=[]
     )
+
+# Mocking the AI service output model locally for tests as it differs from the schema
+class MockExerciseSet(BaseModel):
+    exercise_name: str
+    reps: int
+    weight: float
+    weight_unit: str
+    sets: int
+
+class MockCardioLog(BaseModel):
+    exercise_name: str
+    duration_minutes: float
+    distance: float
+    distance_unit: str
+    speed: Optional[float] = None
+    pace: Optional[str] = None
+    pace_unit: Optional[str] = None
+    laps: Optional[int] = None
+
+class MockStructuredLog(BaseModel):
+    sets: List[MockExerciseSet] = []
+    cardio: List[MockCardioLog] = []
+    note: str = ""
+    workout_type: str = ""
+    visibility: str = "private"
+    comment: str = ""
+    updated_weight: Optional[float] = None
+    updated_bench_1rm: Optional[float] = None
+    updated_squat_1rm: Optional[float] = None
+    updated_deadlift_1rm: Optional[float] = None
+    updated_fat_percentage: Optional[float] = None
 
 # --- Tests ---
 
@@ -260,3 +295,178 @@ def test_get_visible_workouts_close_friend(mock_db):
         
         # If we wanted to be strict, we would check:
         # assert "close_friends" in visible_types (logic inside function)
+
+# --- WORKOUT CONSOLIDATION TESTS ---
+
+def test_manage_voice_log_consolidation_success(mock_db):
+    """
+    Test that a log submitted within 30 minutes of the last workout
+    is consolidated into that workout.
+    """
+    user_id = "user-123"
+    existing_workout_id = "w-existing"
+    
+    # 1. Setup Time
+    now = datetime.datetime.now(timezone.utc)
+    ten_minutes_ago = now - datetime.timedelta(minutes=10)
+    
+    # 2. Mock Recent Workout
+    recent_workout = models.Workout(
+        id=existing_workout_id, 
+        user_id=user_id, 
+        created_at=ten_minutes_ago,
+        notes="Old note"
+    )
+    
+    # Mock the query chain: db.query(Workout).filter(...).order_by(...).first()
+    mock_query = mock_db.query.return_value
+    mock_filter = mock_query.filter.return_value
+    mock_order_by = mock_filter.order_by.return_value
+    mock_order_by.first.return_value = recent_workout
+    
+    # 3. Setup Voice Log Input
+    voice_log = MockStructuredLog(
+        text="Added sets",
+        sets=[
+            MockExerciseSet(exercise_name="Curls", reps=10, weight=20, weight_unit="kg", sets=1)
+        ],
+        cardio=[],
+        note="New note",
+        workout_type="Arms",
+        comment="Nice"
+    )
+    
+    # Mock dependencies
+    with patch("app.crud.workout.crud_user.get_user") as mock_get_user, \
+         patch("app.crud.workout.create_workout_from_log") as mock_create_new:
+        
+        mock_get_user.return_value = models.User(id=user_id)
+        
+        # Act
+        crud_workout.manage_voice_log(mock_db, voice_log, user_id, created_at=now)
+        
+        # Assert
+        # Should NOT create a new workout
+        mock_create_new.assert_not_called()
+        
+        # Should append notes
+        assert "Old note" in recent_workout.notes
+        assert "[Update]: New note" in recent_workout.notes
+        
+        # Should add new exercise set to DB
+        added_sets = [
+            call[0][0] for call in mock_db.add.call_args_list 
+            if isinstance(call[0][0], models.ExerciseSet)
+        ]
+        assert len(added_sets) == 1
+        assert added_sets[0].workout_id == existing_workout_id
+        assert added_sets[0].exercise_name == "Curls"
+
+def test_manage_voice_log_consolidation_failure_time_limit(mock_db):
+    """
+    Test that a log submitted AFTER 30 minutes creates a NEW workout.
+    """
+    user_id = "user-123"
+    
+    # 1. Setup Time
+    now = datetime.datetime.now(timezone.utc)
+    forty_minutes_ago = now - datetime.timedelta(minutes=40)
+    
+    # 2. Mock Recent Workout (Too old)
+    recent_workout = models.Workout(
+        id="w-old", 
+        user_id=user_id, 
+        created_at=forty_minutes_ago
+    )
+    
+    # Mock query returning the old workout
+    mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = recent_workout
+    
+    # 3. Input
+    voice_log = MockStructuredLog(
+        text="New workout",
+        sets=[MockExerciseSet(exercise_name="Squat", reps=5, weight=100, weight_unit="kg", sets=1)],
+        cardio=[],
+        note="Fresh start",
+        workout_type="Legs",
+        comment="Go"
+    )
+    
+    with patch("app.crud.workout.crud_user.get_user") as mock_get_user, \
+         patch("app.crud.workout.create_workout_from_log") as mock_create_new:
+         
+        mock_get_user.return_value = models.User(id=user_id)
+        
+        # Act
+        crud_workout.manage_voice_log(mock_db, voice_log, user_id, created_at=now)
+        
+        # Assert
+        # Should create a NEW workout because the previous one is too old
+        mock_create_new.assert_called_once()
+
+def test_manage_voice_log_consolidation_no_previous_workout(mock_db):
+    """
+    Test that if no previous workout exists, a new one is created.
+    """
+    user_id = "user-123"
+    
+    # Mock query returning None (no recent workout)
+    mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
+    
+    voice_log = MockStructuredLog(
+        text="First workout",
+        sets=[MockExerciseSet(exercise_name="Squat", reps=5, weight=100, weight_unit="kg", sets=1)],
+        cardio=[],
+        note="Fresh start",
+        workout_type="Legs",
+        comment="Go"
+    )
+    
+    with patch("app.crud.workout.crud_user.get_user") as mock_get_user, \
+         patch("app.crud.workout.create_workout_from_log") as mock_create_new:
+         
+        mock_get_user.return_value = models.User(id=user_id)
+        
+        # Act
+        crud_workout.manage_voice_log(mock_db, voice_log, user_id)
+        
+        # Assert
+        mock_create_new.assert_called_once()
+
+def test_append_to_existing_workout_logic(mock_db):
+    """
+    Unit test for the helper function `append_to_existing_workout`.
+    Verifies merging of notes and adding of cardio sessions.
+    """
+    # Arrange
+    workout = models.Workout(id="w-1", notes="Original")
+    log = MockStructuredLog(
+        text="run", 
+        note="Supplementary", 
+        sets=[], 
+        cardio=[
+            MockCardioLog(
+                exercise_name="Run", 
+                duration_minutes=10, 
+                distance=1, 
+                distance_unit="km"
+            )
+        ], 
+        workout_type="Cardio", 
+        comment="Ok"
+    )
+    
+    # Act
+    crud_workout.append_to_existing_workout(mock_db, workout, log)
+    
+    # Assert
+    # Check notes merged
+    assert workout.notes == "Original\n\n[Update]: Supplementary"
+    
+    # Check cardio session added
+    added_objs = [call[0][0] for call in mock_db.add.call_args_list]
+    cardio_sessions = [o for o in added_objs if isinstance(o, models.CardioSession)]
+    
+    assert len(cardio_sessions) == 1
+    assert cardio_sessions[0].workout_id == "w-1"
+    assert cardio_sessions[0].name == "Run"

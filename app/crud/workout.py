@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 from app import models
 from app.schemas import workout as workout_schemas
 import uuid
@@ -8,6 +9,9 @@ from . import user as crud_user
 from . import social as crud_social
 from . import notification as crud_notification
 from . import admin as crud_admin # for rubbish log logic
+
+# --- CONFIGURATION ---
+WORKOUT_CONSOLIDATION_BUFFER_MINUTES = 30
 
 def update_workout(
     db: Session,
@@ -261,6 +265,66 @@ def create_workout_from_log(db: Session, log: workout_schemas.VoiceLog, user_id:
         
     return db_workout
 
+def append_to_existing_workout(db: Session, workout: models.Workout, log: workout_schemas.VoiceLog) -> models.Workout:
+    """
+    Appends new sets and cardio sessions from a log to an existing workout.
+    Also appends any new notes to the existing notes.
+    """
+    # 1. Append Notes
+    if log.note:
+        if workout.notes:
+            workout.notes += f"\n\n[Update]: {log.note}"
+        else:
+            workout.notes = log.note
+    
+    # 2. Append Sets
+    # Find the current highest set number to continue numbering correctly?
+    # Actually, your model has 'set_number' which comes from the AI. 
+    # If the user says "3 sets of bench", the AI returns sets=3. 
+    # If we append, we might just want to add them as is. 
+    # Logic: Just add the new sets. The 'set_number' usually implies "Set 1, Set 2" OR "3 total sets".
+    # For simplicity, we just add them.
+    
+    if log.sets:
+        for ai_set in log.sets:
+            db_exercise_set = models.ExerciseSet(
+                id=str(uuid.uuid4()),
+                exercise_name=ai_set.exercise_name,
+                set_number=ai_set.sets, # Takes the AI's interpretation (e.g. 1, 2, 3 or total count)
+                reps=ai_set.reps,
+                weight=ai_set.weight,
+                weight_unit=ai_set.weight_unit,
+                workout_id=workout.id
+            )
+            db.add(db_exercise_set)
+
+    # 3. Append Cardio
+    if log.cardio:
+        for ai_cardio in log.cardio:
+            db_cardio_session = models.CardioSession(
+                id=str(uuid.uuid4()),
+                name=ai_cardio.exercise_name,
+                duration_minutes=ai_cardio.duration_minutes,
+                speed=ai_cardio.speed,
+                pace=ai_cardio.pace,
+                pace_unit=ai_cardio.pace_unit,
+                distance=ai_cardio.distance,
+                distance_unit=ai_cardio.distance_unit,
+                laps=ai_cardio.laps,
+                workout_id=workout.id
+            )
+            db.add(db_cardio_session)
+
+    try:
+        db.commit()
+        db.refresh(workout)
+        print(f"Successfully consolidated log into workout {workout.id}")
+        return workout
+    except Exception as e:
+        db.rollback()
+        print(f"Error appending to workout: {e}")
+        raise e
+
 def manage_voice_log(db: Session, voice_log: workout_schemas.VoiceLog, user_id: str, created_at: Optional[datetime.datetime] = None):
     logging_timestamp = created_at if created_at else datetime.datetime.now(datetime.timezone.utc)
     db_user = crud_user.get_user(db, id=user_id)
@@ -287,7 +351,37 @@ def manage_voice_log(db: Session, voice_log: workout_schemas.VoiceLog, user_id: 
 
     # Check for sets OR cardio
     if (voice_log.sets and len(voice_log.sets) > 0) or (voice_log.cardio and len(voice_log.cardio) > 0):
-        create_workout_from_log(db, voice_log, user_id, logging_timestamp)
+        # --- NEW CONSOLIDATION LOGIC ---
+        # 1. Find most recent workout for this user
+        most_recent_workout = db.query(models.Workout).filter(
+            models.Workout.user_id == user_id
+        ).order_by(desc(models.Workout.created_at)).first()
+
+        consolidated = False
+        if most_recent_workout:
+            # 2. Check time difference
+            # Ensure timezone awareness compatibility
+            last_time = most_recent_workout.created_at
+            current_time = logging_timestamp
+            
+            # If last_time is naive, assume UTC (or match your app's convention)
+            if last_time.tzinfo is None:
+                last_time = last_time.replace(tzinfo=datetime.timezone.utc)
+            if current_time.tzinfo is None:
+                current_time = current_time.replace(tzinfo=datetime.timezone.utc)
+
+            diff = current_time - last_time
+            
+            if diff < datetime.timedelta(minutes=WORKOUT_CONSOLIDATION_BUFFER_MINUTES) and diff >= datetime.timedelta(0):
+                # 3. Consolidate!
+                print(f"Consolidating log into recent workout {most_recent_workout.id} (Diff: {diff})")
+                append_to_existing_workout(db, most_recent_workout, voice_log)
+                consolidated = True
+        
+        if not consolidated:
+            # 4. Fallback to creating a new workout
+            create_workout_from_log(db, voice_log, user_id, logging_timestamp)
+        # -------------------------------
 
     if not voice_log.updated_weight and not voice_log.updated_bench_1rm and not voice_log.updated_squat_1rm and not voice_log.updated_deadlift_1rm and not voice_log.updated_fat_percentage and not ((voice_log.sets and len(voice_log.sets) > 0) or (voice_log.cardio and len(voice_log.cardio) > 0)):
         crud_admin.log_rubbish_voice_log(db, user_id=user_id)
