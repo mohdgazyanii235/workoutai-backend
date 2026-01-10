@@ -107,7 +107,8 @@ def test_get_day_view_metrics(mock_db):
         created_at=datetime.now(timezone.utc), 
         user_id="u1", 
         visibility="private",
-        notes="Test workout"
+        notes="Test workout",
+        status="completed"
     )
     mock_workouts = [mock_workout]
     

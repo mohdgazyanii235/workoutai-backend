@@ -57,6 +57,7 @@ class MockStructuredLog(BaseModel):
     updated_squat_1rm: Optional[float] = None
     updated_deadlift_1rm: Optional[float] = None
     updated_fat_percentage: Optional[float] = None
+    scheduled_date: Optional[datetime.date] = None # Added for scheduling tests
 
 # --- Tests ---
 
@@ -83,6 +84,7 @@ def test_create_manual_workout_success(mock_db):
     assert isinstance(db_workout, models.Workout)
     assert db_workout.user_id == user_id
     assert db_workout.notes == "Test workout"
+    assert db_workout.status == "completed" # Default should be completed if time is now
     
     # Inspect the second call to add() to check the set
     args_set, _ = mock_db.add.call_args_list[1]
@@ -95,6 +97,26 @@ def test_create_manual_workout_success(mock_db):
     mock_db.commit.assert_called()
     mock_db.refresh.assert_called()
     assert result == db_workout
+
+def test_create_manual_workout_scheduled(mock_db):
+    """
+    Test creating a scheduled (future) workout manually.
+    """
+    user_id = "user-123"
+    future_time = datetime.datetime.now(timezone.utc) + timedelta(days=2)
+    
+    workout_data = workout_schemas.WorkoutUpdate(
+        notes="Planned workout",
+        created_at=future_time
+    )
+    
+    result = crud_workout.create_manual_workout(mock_db, workout_data, user_id)
+    
+    args, _ = mock_db.add.call_args_list[0]
+    db_workout = args[0]
+    
+    assert db_workout.status == "planned"
+    assert db_workout.created_at == future_time
 
 def test_delete_workout_success(mock_db):
     """
@@ -189,6 +211,21 @@ def test_update_workout_sets_logic(mock_db):
         if isinstance(obj, models.ExerciseSet) and obj.exercise_name == "New Ex 3"
     ]
     assert len(new_sets_added) == 1
+
+def test_update_workout_status(mock_db):
+    """
+    Test updating the status of a workout.
+    """
+    workout_id = "w-1"
+    user_id = "u-1"
+    mock_workout = models.Workout(id=workout_id, user_id=user_id, status="planned")
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_workout
+    
+    update_schema = workout_schemas.WorkoutUpdate(status="completed")
+    
+    crud_workout.update_workout(mock_db, workout_id, update_schema, user_id)
+    
+    assert mock_workout.status == "completed"
 
 @patch("app.crud.workout.crud_notification")
 @patch("app.crud.workout.crud_social")
@@ -315,7 +352,8 @@ def test_manage_voice_log_consolidation_success(mock_db):
         id=existing_workout_id, 
         user_id=user_id, 
         created_at=ten_minutes_ago,
-        notes="Old note"
+        notes="Old note",
+        status="completed"
     )
     
     # Mock the query chain: db.query(Workout).filter(...).order_by(...).first()
@@ -361,6 +399,69 @@ def test_manage_voice_log_consolidation_success(mock_db):
         assert len(added_sets) == 1
         assert added_sets[0].workout_id == existing_workout_id
         assert added_sets[0].exercise_name == "Curls"
+
+def test_manage_voice_log_future_scheduling(mock_db):
+    """
+    Test that a future scheduled log creates a PLANNED workout and skips consolidation.
+    """
+    user_id = "user-123"
+    
+    # 1. Setup future date
+    future_date = datetime.date.today() + datetime.timedelta(days=5)
+    
+    # 2. Voice log with scheduled date AND sets (to pass guard clause)
+    voice_log = MockStructuredLog(
+        text="Schedule for later",
+        scheduled_date=future_date,
+        sets=[MockExerciseSet(exercise_name="Future Exercise", reps=10, weight=10, weight_unit="kg", sets=3)],
+        workout_type="Future",
+        comment="Scheduled."
+    )
+    
+    # 3. Mock recent workout (to ensure it doesn't consolidate even if very recent)
+    now = datetime.datetime.now(timezone.utc)
+    recent_workout = models.Workout(id="w-now", created_at=now, user_id=user_id)
+    
+    mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = recent_workout
+    
+    with patch("app.crud.workout.crud_user.get_user") as mock_get_user, \
+         patch("app.crud.workout.create_workout_from_log") as mock_create_new:
+         
+        mock_get_user.return_value = models.User(id=user_id)
+        
+        # Act
+        crud_workout.manage_voice_log(mock_db, voice_log, user_id)
+        
+        # Assert
+        # Should call create_workout_from_log with the future timestamp
+        mock_create_new.assert_called_once()
+        
+        # Check arguments passed to create
+        args, kwargs = mock_create_new.call_args
+        passed_timestamp = args[3]
+        assert passed_timestamp.date() == future_date
+        
+        # Ensure it didn't try to query for recent workouts (optimization check, optional but good)
+        # OR ensure it didn't call append logic.
+        # Since we mocked create_workout_from_log, if it called that, it skipped append.
+
+def test_create_workout_from_log_sets_status(mock_db):
+    """
+    Test that create_workout_from_log correctly sets 'planned' status for future dates.
+    """
+    user_id = "u1"
+    future_time = datetime.datetime.now(timezone.utc) + timedelta(days=1)
+    
+    voice_log = MockStructuredLog(text="Future", note="Plan")
+    
+    # Act
+    crud_workout.create_workout_from_log(mock_db, voice_log, user_id, created_at=future_time)
+    
+    # Assert
+    args, _ = mock_db.add.call_args_list[0]
+    db_workout = args[0]
+    assert db_workout.status == "planned"
+    assert db_workout.created_at == future_time
 
 def test_manage_voice_log_consolidation_failure_time_limit(mock_db):
     """

@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from fastapi.exceptions import ResponseValidationError
 from unittest.mock import MagicMock, patch
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from app.main import app
 from app import models, schemas
 from app.auth.auth_service import get_current_user
@@ -41,7 +41,8 @@ def create_mock_voice_log(**kwargs):
         "updated_squat_1rm_unit": "",
         "updated_deadlift_1rm": None,
         "updated_deadlift_1rm_unit": "",
-        "updated_fat_percentage": None
+        "updated_fat_percentage": None,
+        "scheduled_date": None # Added default for new feature
     }
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -186,6 +187,32 @@ def test_voice_log_metrics_updates():
                 # Ensure no workout data created if not present
                 assert called_log.sets == []
                 assert called_log.cardio == []
+
+def test_voice_log_scheduled_workout():
+    """
+    Test that the router correctly handles a scheduled date from the AI.
+    """
+    input_text = "Schedule chest for next Friday"
+    future_date = date(2023, 12, 25)
+    
+    mock_response = create_mock_voice_log(
+        text=input_text,
+        scheduled_date=future_date,
+        workout_type="Chest",
+        comment="Scheduled for Christmas"
+    )
+    
+    with patch("app.routers.log.ai_service.structured_log_text", return_value=mock_response):
+        with patch("app.routers.log.admin_crud.log_open_ai_query"):
+            with patch("app.routers.log.workout_crud.manage_voice_log", return_value="Scheduled.") as mock_manage:
+                
+                response = client.post("/log/voice", json={"text": input_text})
+                assert response.status_code == 200
+                
+                # Check that the scheduled_date was passed down
+                args, _ = mock_manage.call_args
+                called_log = args[1]
+                assert called_log.scheduled_date == future_date
 
 def test_voice_log_conversational():
     """

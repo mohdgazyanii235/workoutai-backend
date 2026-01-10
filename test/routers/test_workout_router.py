@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import MagicMock, patch
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from app.main import app
 from app import models, schemas
 from app.auth.auth_service import get_current_user
@@ -26,7 +26,8 @@ mock_db_session = MagicMock()
 
 @pytest.fixture(autouse=True)
 def setup_dependency_overrides():
-    mock_user = create_mock_user()
+    # Ensure consistency: Use "u1" as the standard test user ID
+    mock_user = create_mock_user(id="u1")
     app.dependency_overrides[get_current_user] = lambda: mock_user
     app.dependency_overrides[get_api_key] = lambda: "valid-api-key"
     app.dependency_overrides[get_db] = lambda: mock_db_session
@@ -42,11 +43,12 @@ def test_get_workouts_success():
     """Test retrieving a list of workouts for the current user."""
     mock_workout = models.Workout(
         id="w1", 
-        user_id="test-user-id", 
+        user_id="u1", # Matched to fixture
         created_at=datetime.now(timezone.utc),
         visibility="private",
         notes="Test note",
-        workout_type="Strength"
+        workout_type="Strength",
+        status="completed"
     )
     
     # We must patch get_db in the module it is imported into, OR configure the mock_db_session we injected
@@ -59,16 +61,18 @@ def test_get_workouts_success():
     data = response.json()
     assert len(data) == 1
     assert data[0]["id"] == "w1"
+    assert data[0]["status"] == "completed"
 
 def test_get_workout_detail_success():
     """Test retrieving a specific workout detail."""
     mock_workout = models.Workout(
         id="w1", 
-        user_id="test-user-id", 
+        user_id="u1", 
         created_at=datetime.now(timezone.utc),
         visibility="private",
         notes="Test note",
         workout_type="Strength",
+        status="completed",
         sets=[],
         cardio_sessions=[]
     )
@@ -80,6 +84,7 @@ def test_get_workout_detail_success():
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == "w1"
+    assert data["status"] == "completed"
     assert "sets" in data
     assert "cardio_sessions" in data
 
@@ -96,11 +101,12 @@ def test_delete_workout_success():
     """Test successful deletion."""
     mock_workout = models.Workout(
         id="w1", 
-        user_id="test-user-id",
+        user_id="u1", 
         created_at=datetime.now(timezone.utc),
         visibility="private",
         notes="Test",
-        workout_type="Strength"
+        workout_type="Strength",
+        status="completed"
     )
     
     with patch("app.routers.workouts.workout_crud.delete_workout", return_value=mock_workout):
@@ -121,11 +127,12 @@ def test_update_workout_success():
     
     mock_response = models.Workout(
         id="w1", 
-        user_id="test-user-id", 
+        user_id="u1", 
         notes="Updated notes", 
         visibility="public",
         workout_type="Strength",
         created_at=datetime.now(timezone.utc),
+        status="completed",
         sets=[],             
         cardio_sessions=[]   
     )
@@ -134,6 +141,7 @@ def test_update_workout_success():
         response = client.put("/workouts/w1", json=payload)
         assert response.status_code == 200
         assert response.json()["notes"] == "Updated notes"
+        assert response.json()["status"] == "completed"
 
 def test_update_workout_not_found():
     """Test update returns 404 if CRUD returns None."""
@@ -162,11 +170,12 @@ def test_create_workout_manual_success():
     }
     mock_created = models.Workout(
         id="new-w", 
-        user_id="test-user-id", 
+        user_id="u1", 
         notes="New workout",
         workout_type="Strength",
         visibility="private",
         created_at=datetime.now(timezone.utc),
+        status="completed",
         sets=[],
         cardio_sessions=[]
     )
@@ -175,6 +184,35 @@ def test_create_workout_manual_success():
         response = client.post("/workouts", json=payload)
         assert response.status_code == 200
         assert response.json()["id"] == "new-w"
+        assert response.json()["status"] == "completed"
+
+def test_create_workout_manual_scheduled():
+    """Test manually creating a scheduled workout."""
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    payload = {
+        "notes": "Planned",
+        "created_at": future,
+        "workout_type": "Strength",
+        "sets": []
+    }
+    
+    # Mock return value should reflect the planned status
+    mock_created = models.Workout(
+        id="planned-w", 
+        user_id="u1", 
+        notes="Planned",
+        workout_type="Strength",
+        visibility="private",
+        created_at=datetime.fromisoformat(future),
+        status="planned",
+        sets=[],
+        cardio_sessions=[]
+    )
+    
+    with patch("app.routers.workouts.workout_crud.create_manual_workout", return_value=mock_created):
+        response = client.post("/workouts", json=payload)
+        assert response.status_code == 200
+        assert response.json()["status"] == "planned"
 
 def test_create_workout_manual_error():
     """Test manual creation error handling."""
@@ -197,7 +235,8 @@ def test_get_user_public_workouts_accepted_friend():
                 created_at=datetime.now(timezone.utc),
                 visibility="public",
                 notes="Note",
-                workout_type="Strength"
+                workout_type="Strength",
+                status="completed"
             )
         ]
         with patch("app.routers.workouts.workout_crud.get_visible_workouts_for_user", return_value=mock_workouts):
@@ -221,18 +260,37 @@ def test_get_public_workout_detail_owner():
     workout_id = "w1"
     mock_workout = models.Workout(
         id=workout_id, 
-        user_id="test-user-id", # Same as current user
+        user_id="u1", # Same as current user (updated from test-user-id)
         created_at=datetime.now(timezone.utc),
         visibility="private",
         notes="My notes",
         workout_type="Strength",
+        status="completed",
         sets=[],
         cardio_sessions=[]
     )
     
+    # We need to make sure the mocked workout is returned for the specific query
+    # The endpoint calls: db.query(models.Workout).filter(models.Workout.id == workout_id).first()
+    # But get_workout_detail also checks if user is friend if not owner.
+    # Here owner is viewing.
+    
+    # Reset mock to clear previous configurations if necessary
+    mock_db_session.reset_mock()
+    
+    # Configure the mock chain for: db.query(models.Workout).filter(models.Workout.id == workout_id).first()
     mock_db_session.query.return_value.filter.return_value.first.return_value = mock_workout
     
+    # The authenticated user is "u1" (from fixture)
+    # The workout owner is "u1"
+    # So it should return the workout directly.
+    
     response = client.get(f"/workouts/public/{workout_id}")
+    
+    # Debugging print if test fails
+    if response.status_code != 200:
+        print(response.json())
+        
     assert response.status_code == 200
     assert response.json()["id"] == workout_id
 
@@ -240,7 +298,7 @@ def test_get_public_workout_detail_not_friend():
     """Test 403 if not friends."""
     workout_id = "w1"
     owner_id = "other-user"
-    mock_workout = models.Workout(id=workout_id, user_id=owner_id)
+    mock_workout = models.Workout(id=workout_id, user_id=owner_id, status="completed")
     
     mock_db_session.query.return_value.filter.return_value.first.return_value = mock_workout
     
@@ -260,6 +318,7 @@ def test_get_public_workout_detail_close_friend_success():
         created_at=datetime.now(timezone.utc),
         notes="Secret notes",
         workout_type="Strength",
+        status="completed",
         sets=[],
         cardio_sessions=[]
     )
@@ -283,7 +342,8 @@ def test_get_public_workout_detail_close_friend_fail():
         visibility="close_friends",
         created_at=datetime.now(timezone.utc),
         sets=[],
-        cardio_sessions=[]
+        cardio_sessions=[],
+        status="completed"
     )
     
     mock_db_session.query.return_value.filter.return_value.first.return_value = mock_workout
@@ -299,7 +359,7 @@ def test_get_public_workout_detail_private():
     """Test 404/403 for private visibility even if friends."""
     workout_id = "w1"
     owner_id = "other-user"
-    mock_workout = models.Workout(id=workout_id, user_id=owner_id, visibility="private")
+    mock_workout = models.Workout(id=workout_id, user_id=owner_id, visibility="private", status="completed")
     
     mock_db_session.query.return_value.filter.return_value.first.return_value = mock_workout
     

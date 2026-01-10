@@ -29,12 +29,18 @@ def update_workout(
     if not db_workout:
         return None # Workout not found or doesn't belong to the user
 
-    # 1. Update Workout fields (notes, workout_type) if provided
+    # 1. Update Workout fields (notes, workout_type, status) if provided
     update_data = workout_update.model_dump(exclude_unset=True) # Get only fields present in the request
     if "notes" in update_data:
         db_workout.notes = update_data["notes"] # Handles null correctly
     if "workout_type" in update_data:
         db_workout.workout_type = update_data["workout_type"]
+    if "status" in update_data:
+        db_workout.status = update_data["status"]
+    
+    # Allow updating the date manually as well
+    if "created_at" in update_data and update_data["created_at"]:
+        db_workout.created_at = update_data["created_at"]
 
     # --- MODIFIED: Handle Notifications for Public AND Close Friends ---
     if "visibility" in update_data:
@@ -178,13 +184,27 @@ def get_visible_workouts_for_user(db: Session, target_user_id: str, viewer_id: s
     ).order_by(models.Workout.created_at.desc()).limit(limit).all()
 
 def create_workout_from_log(db: Session, log: workout_schemas.VoiceLog, user_id: str, created_at: Optional[datetime.datetime] = None) -> models.Workout:
+    
+    # Determine Status
+    status = "completed"
+    if created_at:
+        # Check if created_at is in the future
+        now = datetime.datetime.now(datetime.timezone.utc)
+        target_time = created_at
+        if target_time.tzinfo is None:
+             target_time = target_time.replace(tzinfo=datetime.timezone.utc)
+        
+        if target_time > now:
+            status = "planned"
+
     db_workout = models.Workout(
         id=str(uuid.uuid4()),
         user_id=user_id,
         notes=log.note,
         workout_type=log.workout_type,
         created_at=created_at,
-        visibility=log.visibility
+        visibility=log.visibility,
+        status=status
     )
     db.add(db_workout)
     
@@ -278,19 +298,12 @@ def append_to_existing_workout(db: Session, workout: models.Workout, log: workou
             workout.notes = log.note
     
     # 2. Append Sets
-    # Find the current highest set number to continue numbering correctly?
-    # Actually, your model has 'set_number' which comes from the AI. 
-    # If the user says "3 sets of bench", the AI returns sets=3. 
-    # If we append, we might just want to add them as is. 
-    # Logic: Just add the new sets. The 'set_number' usually implies "Set 1, Set 2" OR "3 total sets".
-    # For simplicity, we just add them.
-    
     if log.sets:
         for ai_set in log.sets:
             db_exercise_set = models.ExerciseSet(
                 id=str(uuid.uuid4()),
                 exercise_name=ai_set.exercise_name,
-                set_number=ai_set.sets, # Takes the AI's interpretation (e.g. 1, 2, 3 or total count)
+                set_number=ai_set.sets, 
                 reps=ai_set.reps,
                 weight=ai_set.weight,
                 weight_unit=ai_set.weight_unit,
@@ -326,64 +339,82 @@ def append_to_existing_workout(db: Session, workout: models.Workout, log: workou
         raise e
 
 def manage_voice_log(db: Session, voice_log: workout_schemas.VoiceLog, user_id: str, created_at: Optional[datetime.datetime] = None):
-    logging_timestamp = created_at if created_at else datetime.datetime.now(datetime.timezone.utc)
+    # 1. Determine the timestamp
+    # Check if the AI detected a SCHEDULED date (e.g., "Schedule for Jan 18th")
+    if getattr(voice_log, "scheduled_date", None):
+        # Create a datetime from the date (set time to noon or start of day to avoid timezone confusion, or keep as 00:00)
+        # Using noon to be safe against minor timezone shifts
+        d = voice_log.scheduled_date
+        logging_timestamp = datetime.datetime(d.year, d.month, d.day, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        print(f"Scheduling workout for: {logging_timestamp}")
+        is_future_workout = True
+    else:
+        # Standard log
+        logging_timestamp = created_at if created_at else datetime.datetime.now(datetime.timezone.utc)
+        is_future_workout = False
+
     db_user = crud_user.get_user(db, id=user_id)
-    entry_date = logging_timestamp.date() if logging_timestamp.date() else datetime.date.today()
+    entry_date = logging_timestamp.date() 
     date_str = entry_date.isoformat()
+    
     if not db_user:
         print(f"User not found with ID: {user_id}")
         return None
 
-    if voice_log.updated_weight:
-        crud_user.update_history_tracked_field(db, db_user, voice_log.updated_weight, date_str, "weight")
-    
-    if voice_log.updated_bench_1rm:
-        crud_user.update_history_tracked_field(db, db_user, voice_log.updated_bench_1rm, date_str, "bench_1rm")
+    # Only update user metrics if it's NOT a future workout. 
+    # Usually you don't update your "current weight" based on a plan for next week.
+    if not is_future_workout:
+        if voice_log.updated_weight:
+            crud_user.update_history_tracked_field(db, db_user, voice_log.updated_weight, date_str, "weight")
+        
+        if voice_log.updated_bench_1rm:
+            crud_user.update_history_tracked_field(db, db_user, voice_log.updated_bench_1rm, date_str, "bench_1rm")
 
-    if voice_log.updated_squat_1rm:
-        crud_user.update_history_tracked_field(db, db_user, voice_log.updated_squat_1rm, date_str, "squat_1rm")
+        if voice_log.updated_squat_1rm:
+            crud_user.update_history_tracked_field(db, db_user, voice_log.updated_squat_1rm, date_str, "squat_1rm")
 
-    if voice_log.updated_deadlift_1rm:
-        crud_user.update_history_tracked_field(db, db_user, voice_log.updated_deadlift_1rm, date_str, "deadlift_1rm")
+        if voice_log.updated_deadlift_1rm:
+            crud_user.update_history_tracked_field(db, db_user, voice_log.updated_deadlift_1rm, date_str, "deadlift_1rm")
 
-    if voice_log.updated_fat_percentage:
-        crud_user.update_history_tracked_field(db, db_user, voice_log.updated_fat_percentage, date_str, "fat_percentage")
+        if voice_log.updated_fat_percentage:
+            crud_user.update_history_tracked_field(db, db_user, voice_log.updated_fat_percentage, date_str, "fat_percentage")
 
     # Check for sets OR cardio
     if (voice_log.sets and len(voice_log.sets) > 0) or (voice_log.cardio and len(voice_log.cardio) > 0):
         # --- NEW CONSOLIDATION LOGIC ---
-        # 1. Find most recent workout for this user
-        most_recent_workout = db.query(models.Workout).filter(
-            models.Workout.user_id == user_id
-        ).order_by(desc(models.Workout.created_at)).first()
-
+        # Skip consolidation if this is a future scheduled workout
         consolidated = False
-        if most_recent_workout:
-            # 2. Check time difference
-            # Ensure timezone awareness compatibility
-            last_time = most_recent_workout.created_at
-            current_time = logging_timestamp
-            
-            # If last_time is naive, assume UTC (or match your app's convention)
-            if last_time.tzinfo is None:
-                last_time = last_time.replace(tzinfo=datetime.timezone.utc)
-            if current_time.tzinfo is None:
-                current_time = current_time.replace(tzinfo=datetime.timezone.utc)
+        
+        if not is_future_workout:
+            # 1. Find most recent workout for this user
+            most_recent_workout = db.query(models.Workout).filter(
+                models.Workout.user_id == user_id
+            ).order_by(desc(models.Workout.created_at)).first()
 
-            diff = current_time - last_time
-            
-            if diff < datetime.timedelta(minutes=WORKOUT_CONSOLIDATION_BUFFER_MINUTES) and diff >= datetime.timedelta(0):
-                # 3. Consolidate!
-                print(f"Consolidating log into recent workout {most_recent_workout.id} (Diff: {diff})")
-                append_to_existing_workout(db, most_recent_workout, voice_log)
-                consolidated = True
+            if most_recent_workout:
+                # 2. Check time difference
+                last_time = most_recent_workout.created_at
+                current_time = logging_timestamp
+                
+                if last_time.tzinfo is None:
+                    last_time = last_time.replace(tzinfo=datetime.timezone.utc)
+                if current_time.tzinfo is None:
+                    current_time = current_time.replace(tzinfo=datetime.timezone.utc)
+
+                diff = current_time - last_time
+                
+                if diff < datetime.timedelta(minutes=WORKOUT_CONSOLIDATION_BUFFER_MINUTES) and diff >= datetime.timedelta(0):
+                    # 3. Consolidate!
+                    print(f"Consolidating log into recent workout {most_recent_workout.id} (Diff: {diff})")
+                    append_to_existing_workout(db, most_recent_workout, voice_log)
+                    consolidated = True
         
         if not consolidated:
-            # 4. Fallback to creating a new workout
+            # 4. Fallback to creating a new workout (or a future scheduled one)
             create_workout_from_log(db, voice_log, user_id, logging_timestamp)
         # -------------------------------
 
-    if not voice_log.updated_weight and not voice_log.updated_bench_1rm and not voice_log.updated_squat_1rm and not voice_log.updated_deadlift_1rm and not voice_log.updated_fat_percentage and not ((voice_log.sets and len(voice_log.sets) > 0) or (voice_log.cardio and len(voice_log.cardio) > 0)):
+    if not is_future_workout and not voice_log.updated_weight and not voice_log.updated_bench_1rm and not voice_log.updated_squat_1rm and not voice_log.updated_deadlift_1rm and not voice_log.updated_fat_percentage and not ((voice_log.sets and len(voice_log.sets) > 0) or (voice_log.cardio and len(voice_log.cardio) > 0)):
         crud_admin.log_rubbish_voice_log(db, user_id=user_id)
     
 
@@ -411,13 +442,32 @@ def delete_workout(db: Session, workout_id: str, user_id: str) -> models.Workout
     return db_workout
 
 def create_manual_workout(db: Session, workout_data: workout_schemas.WorkoutUpdate, user_id: str) -> models.Workout:
-    # 1. Create the parent Workout
+    # 1. Determine creation time
+    # If the user provided a specific date/time (e.g. scheduling for future), use it.
+    # Otherwise use now.
+    if workout_data.created_at:
+        creation_time = workout_data.created_at
+    else:
+        creation_time = datetime.datetime.now(datetime.timezone.utc)
+
+    # Determine Status
+    status = "completed"
+    now = datetime.datetime.now(datetime.timezone.utc)
+    target_time = creation_time
+    if target_time.tzinfo is None:
+            target_time = target_time.replace(tzinfo=datetime.timezone.utc)
+    
+    if target_time > now:
+        status = "planned"
+
+    # 2. Create the parent Workout
     db_workout = models.Workout(
         id=str(uuid.uuid4()),
         user_id=user_id,
         notes=workout_data.notes,
         workout_type=workout_data.workout_type,
-        created_at=datetime.datetime.now(datetime.timezone.utc) # Use current time
+        created_at=creation_time,
+        status=status
     )
     db.add(db_workout)
     
@@ -429,7 +479,7 @@ def create_manual_workout(db: Session, workout_data: workout_schemas.WorkoutUpda
         print(f"Error creating parent workout: {e}")
         raise e
 
-    # 2. Create the child ExerciseSets
+    # 3. Create the child ExerciseSets
     if workout_data.sets:
         for set_data in workout_data.sets:
             db_exercise_set = models.ExerciseSet(
@@ -443,7 +493,7 @@ def create_manual_workout(db: Session, workout_data: workout_schemas.WorkoutUpda
             )
             db.add(db_exercise_set)
 
-    # Create the child CardioSessions
+    # 4. Create the child CardioSessions
     if workout_data.cardio_sessions:
         for cardio_data in workout_data.cardio_sessions:
             db_cardio_session = models.CardioSession(
@@ -460,7 +510,7 @@ def create_manual_workout(db: Session, workout_data: workout_schemas.WorkoutUpda
             )
             db.add(db_cardio_session)
 
-    # 3. Commit the transaction (for children)
+    # 5. Commit the transaction (for children)
     try:
         db.commit()
         db.refresh(db_workout) # Refresh to get all data

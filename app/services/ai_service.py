@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from dotenv import load_dotenv
 from app.schemas import workout as workout_schemas
+import datetime
 
 load_dotenv()
 
@@ -55,6 +56,7 @@ class VoiceLog(BaseModel):
     updated_deadlift_1rm_unit: str = Field(description="The unit of the users updated deadlift 1rm.")
     updated_fat_percentage: float | None = Field(description="The users fat percentage.")
     comment: str = Field(description="This is the AIs comment on the users log.")
+    scheduled_date: Optional[datetime.date] = Field(description="The date the workout is scheduled for, if the user mentions a future date (e.g. 'next Monday', 'Jan 18th'). Return YYYY-MM-DD.")
 
 llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2)
 parser = PydanticOutputParser(pydantic_object=VoiceLog)
@@ -98,7 +100,8 @@ def structured_log_text(text: str) -> workout_schemas.VoiceLog: # Return the sch
         "updated_deadlift_1rm_unit": "",
         "updated_fat_percentage": null,
         "comment": "Your chest workout is logged! Well done!",
-        "visibility": "public" 
+        "visibility": "public",
+        "scheduled_date": null
 
     }}
     ---
@@ -153,19 +156,28 @@ def structured_log_text(text: str) -> workout_schemas.VoiceLog: # Return the sch
         "updated_deadlift_1rm_unit": "",
         "updated_fat_percentage": null,
         "comment": "Your run and pyramid set workout has been logged!",
-        "visibility": "private" 
+        "visibility": "private",
+        "scheduled_date": null
     }}
     ---
-    **EXAMPLE 3: Weight Update Only**
-    User Input: "Hi today I recorded my weight and it is now 90 Kgs!"
+    **EXAMPLE 3: Scheduling Future Workout**
+    User Input: "Schedule a leg workout for next Friday. I plan to do squats 3 sets of 10."
     Your Output:
     {{
         "cardio": [],
-        "sets": [],
-        "note": "",
-        "workout_type": "",
-        "updated_weight": 90,
-        "updated_weight_unit": "kg",
+        "sets": [
+             {{
+                "exercise_name": "Squats",
+                "reps": 10,
+                "weight": 0,
+                "weight_unit": "kg",
+                "sets": 3
+            }}
+        ],
+        "note": "Planned leg day.",
+        "workout_type": "Legs",
+        "updated_weight": null,
+        "updated_weight_unit": "",
         "updated_bench_1rm": null,
         "updated_bench_1rm_unit": "",
         "updated_squat_1rm": null,
@@ -173,8 +185,9 @@ def structured_log_text(text: str) -> workout_schemas.VoiceLog: # Return the sch
         "updated_deadlift_1rm": null,
         "updated_deadlift_1rm_unit": "",
         "updated_fat_percentage": null,
-        "comment": "Your new weight of 90kg has been tracked!",
-        "visibility": "private" 
+        "comment": "Leg workout scheduled for next Friday!",
+        "visibility": "private",
+        "scheduled_date": "2023-11-03" 
     }}
     ---
     
@@ -187,45 +200,9 @@ def structured_log_text(text: str) -> workout_schemas.VoiceLog: # Return the sch
     -   Remember, if a user has logged a workout, or a cardio session, the workout_type field is mandatory this should be the name of the workout, like chest, cardio, running etc.
     -   If the user only updates a metric (like weight), leave `cardio`, `sets`, `note`, and `workout_type` as empty lists or strings.
     -   **Pace Units:** If the user specifies "per mile", set `pace_unit` to "Min/Mile". If "per km" or "per kilometer", set to "Min/KM". Only default to "Min/KM" if the user mentions pace but NOT the unit.
-    -   It is VERY IMPORTANT to understand that workouts sets can be of 2 types, straight and pyramid. Straigt is when the user simply says 'I did 3 sets 12 reps of 50kgs of x", you need to create and object that looks like the following:
-    {{
-        "sets": [
-            {{
-                "exercise_name": "Bench Press",
-                "reps": 10,
-                "weight": 80,
-                "weight_unit": "kg",
-                "sets": 3
-            }}
-        ],..... Rest of the JSON
-    }}
-    - but if the user says they did a pyramid set, and they will usually say that by describing the entire set like 'the first set I did 12 reps and 50 kgs, the second set I did xxxx'. In this case the object should look like the following:
-    {{
-        "sets": [
-            {{
-                "exercise_name": "Dumbbell Press",
-                "reps": 12,
-                "weight": 50,
-                "weight_unit": "kg",
-                "sets": 1
-            }},
-            {{
-                "exercise_name": "Dumbbell Press",
-                "reps": 10,
-                "weight": 60,
-                "weight_unit": "kg",
-                "sets": 2
-            }},
-            {{
-                "exercise_name": "Dumbbell Press",
-                "reps": 8,
-                "weight": 70,
-                "weight_unit": "kg",
-                "sets": 3
-            }} 
-        ],..... Rest of the JSON
-    }}
-
+    -   **Scheduling:** If the user uses words like "schedule", "plan", "for tomorrow", "for next monday", "on Jan 12th", extract the target date into `scheduled_date` (YYYY-MM-DD). If it is a past workout or "today", leave `scheduled_date` as null.
+    
+    Current Date: {current_date}
 
     Now parse the following users description:
     "{user_text}"
@@ -236,7 +213,10 @@ def structured_log_text(text: str) -> workout_schemas.VoiceLog: # Return the sch
     
     prompt = ChatPromptTemplate.from_template(
         template=prompt_template,
-        partial_variables={"format_instructions": parser.get_format_instructions()},
+        partial_variables={
+            "format_instructions": parser.get_format_instructions(),
+            "current_date": datetime.date.today().isoformat()
+        },
     )
 
     chain = prompt | llm | parser

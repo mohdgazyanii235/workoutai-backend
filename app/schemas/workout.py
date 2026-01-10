@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
 
 class WorkoutLogCreate(BaseModel):
@@ -9,6 +9,7 @@ class WorkoutLogCreate(BaseModel):
 class VoiceLog(BaseModel):
     text: str
     created_at: Optional[datetime] = None
+    scheduled_date: Optional[date] = None # Added for future workouts
 
 class ExerciseSet(BaseModel):
     id: str
@@ -38,7 +39,8 @@ class WorkoutBase(BaseModel):
     notes: Optional[str] = None
     workout_type: Optional[str] = None
     created_at: datetime
-    visibility: str = "private" 
+    visibility: str = "private"
+    status: str = "completed"
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -75,6 +77,8 @@ class WorkoutUpdate(BaseModel):
     visibility: Optional[str] = None
     sets: Optional[List[ExerciseSetUpdate]] = None
     cardio_sessions: Optional[List[CardioSessionUpdate]] = None
+    created_at: Optional[datetime] = None # Added for manual scheduling
+    status: Optional[str] = None # Added status field
 
 class AILogResponse(BaseModel):
     comment: str
