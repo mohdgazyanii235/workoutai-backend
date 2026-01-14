@@ -386,9 +386,11 @@ def manage_voice_log(db: Session, voice_log: workout_schemas.VoiceLog, user_id: 
         consolidated = False
         
         if not is_future_workout:
-            # 1. Find most recent workout for this user
+            # 1. Find most recent *past or present* workout for this user
+            # We must filter out future planned workouts to find the actual last session.
             most_recent_workout = db.query(models.Workout).filter(
-                models.Workout.user_id == user_id
+                models.Workout.user_id == user_id,
+                models.Workout.created_at <= logging_timestamp 
             ).order_by(desc(models.Workout.created_at)).first()
 
             if most_recent_workout:
@@ -396,6 +398,7 @@ def manage_voice_log(db: Session, voice_log: workout_schemas.VoiceLog, user_id: 
                 last_time = most_recent_workout.created_at
                 current_time = logging_timestamp
                 
+                # Ensure both are offset-aware or both are offset-naive
                 if last_time.tzinfo is None:
                     last_time = last_time.replace(tzinfo=datetime.timezone.utc)
                 if current_time.tzinfo is None:
