@@ -91,7 +91,7 @@ class User(Base):
 
     notifications_received = relationship("Notification", foreign_keys="Notification.recipient_id", back_populates="recipient")
     notifications_sent = relationship("Notification", foreign_keys="Notification.sender_id", back_populates="sender")
-
+    joined_workouts = relationship("WorkoutMember", back_populates="user", cascade="all, delete-orphan")
     close_friends = relationship("CloseFriend", foreign_keys=[CloseFriend.owner_id], backref="owner", cascade="all, delete-orphan")
     
     daily_health = relationship("HealthDaily", back_populates="user", cascade="all, delete-orphan")
@@ -120,6 +120,20 @@ class Workout(Base):
         back_populates="workout", 
         cascade="all, delete-orphan"
     )
+    members = relationship("WorkoutMember", back_populates="workout", cascade="all, delete-orphan")
+
+
+class WorkoutMember(Base):
+    __tablename__ = 'workout_members'
+    
+    workout_id = Column(String, ForeignKey('workouts.id'), primary_key=True)
+    user_id = Column(String, ForeignKey('users.id'), primary_key=True)
+    status = Column(String, default="pending", nullable=False) # "pending", "accepted"
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    workout = relationship("Workout", back_populates="members")
+    user = relationship("User", back_populates="joined_workouts")
+
 
 class ExerciseSet(Base):
     __tablename__ = 'exercise_sets'

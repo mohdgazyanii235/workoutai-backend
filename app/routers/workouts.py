@@ -215,3 +215,55 @@ def get_public_workout_detail(
              raise HTTPException(status_code=403, detail="This workout is restricted to Close Friends.")
     
     raise HTTPException(status_code=404, detail="Workout is private")
+
+@router.post("/{workout_id}/join", summary="Request to Join Workout")
+def request_to_join_workout(
+    workout_id: str,
+    current_user: Annotated[user_schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    **Request to join a workout.**
+    Triggers a notification to the host.
+    """
+    result = workout_crud.request_join_workout(db, workout_id, current_user.id)
+    if "error" in result:
+        raise HTTPException(status_code=result["code"], detail=result["error"])
+    return result
+
+@router.put("/{workout_id}/requests/{requester_id}", summary="Respond to Join Request")
+def respond_to_join_request(
+    workout_id: str,
+    requester_id: str,
+    action: workout_schemas.JoinRequestAction,
+    current_user: Annotated[user_schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    **Host accepts or rejects a join request.**
+    Action must be 'accept' or 'reject'.
+    """
+    result = workout_crud.respond_join_request(
+        db, 
+        workout_id, 
+        current_user.id, 
+        requester_id, 
+        action.action
+    )
+    if "error" in result:
+        raise HTTPException(status_code=result["code"], detail=result["error"])
+    return result
+
+@router.delete("/{workout_id}/members", summary="Leave Workout")
+def leave_workout(
+    workout_id: str,
+    current_user: Annotated[user_schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    **Leave a workout you have joined.**
+    """
+    result = workout_crud.leave_workout(db, workout_id, current_user.id)
+    if "error" in result:
+        raise HTTPException(status_code=result["code"], detail=result["error"])
+    return result

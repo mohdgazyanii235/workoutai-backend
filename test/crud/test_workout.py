@@ -571,3 +571,178 @@ def test_append_to_existing_workout_logic(mock_db):
     assert len(cardio_sessions) == 1
     assert cardio_sessions[0].workout_id == "w-1"
     assert cardio_sessions[0].name == "Run"
+
+
+# --- Request to Join ---
+
+def test_request_join_workout_success(mock_db):
+    """Test a user successfully requesting to join a public workout."""
+    workout_id = "w1"
+    requester_id = "u2"
+    owner_id = "u1"
+    
+    # Setup Workout
+    mock_workout = models.Workout(id=workout_id, user_id=owner_id, visibility="public")
+    
+    # Mock Queries:
+    # 1. Get Workout -> returns workout
+    # 2. Check existing member -> returns None (not joined yet)
+    mock_db.query.return_value.filter.return_value.first.side_effect = [
+        mock_workout, 
+        None 
+    ]
+    
+    # Mock Requester User (for notification message)
+    mock_requester = models.User(id=requester_id, first_name="Bob")
+    
+    with patch("app.crud.workout.crud_user.get_user", return_value=mock_requester):
+        with patch("app.crud.workout.crud_notification.create_notification") as mock_notify:
+            
+            result = crud_workout.request_join_workout(mock_db, workout_id, requester_id)
+            
+            # Assertions
+            assert "success" in result["message"]
+            
+            # Verify Member creation
+            mock_db.add.assert_called()
+            args = mock_db.add.call_args[0][0]
+            assert isinstance(args, models.WorkoutMember)
+            assert args.status == "pending"
+            assert args.user_id == requester_id
+            
+            # Verify Notification to Host
+            mock_notify.assert_called_once()
+            call_kwargs = mock_notify.call_args[1]
+            assert call_kwargs['recipient_id'] == owner_id # Host gets it
+            assert call_kwargs['type'] == "WORKOUT_JOIN_REQUEST"
+
+def test_request_join_workout_private_fail(mock_db):
+    """Test request fails if workout is private."""
+    workout_id = "w1"
+    mock_workout = models.Workout(id=workout_id, user_id="u1", visibility="private")
+    
+    # Use side_effect to distinguish between the workout fetch and the member check
+    mock_db.query.return_value.filter.return_value.first.side_effect = [
+        mock_workout, # 1. Workout found
+        None          # 2. No existing member record
+    ]
+    
+    result = crud_workout.request_join_workout(mock_db, workout_id, "u2")
+    
+    assert result["code"] == 403
+    assert "private" in result["error"]
+
+def test_request_join_workout_already_joined(mock_db):
+    """Test request fails if user is already a member."""
+    workout_id = "w1"
+    mock_workout = models.Workout(id=workout_id, user_id="u1", visibility="public")
+    mock_member = models.WorkoutMember(workout_id=workout_id, user_id="u2", status="accepted")
+    
+    mock_db.query.return_value.filter.return_value.first.side_effect = [
+        mock_workout,
+        mock_member # Already found
+    ]
+    
+    result = crud_workout.request_join_workout(mock_db, workout_id, "u2")
+    
+    assert result["code"] == 400
+    assert "already joined" in result["error"]
+
+def test_request_join_workout_host_fail(mock_db):
+    """Test request fails if the host tries to join their own workout."""
+    workout_id = "w1"
+    mock_workout = models.Workout(id=workout_id, user_id="u1", visibility="public")
+    
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_workout
+    
+    result = crud_workout.request_join_workout(mock_db, workout_id, "u1") # Same ID
+    
+    assert result["code"] == 400
+    assert "You are the host" in result["error"]
+
+# --- Respond to Request ---
+
+def test_respond_join_request_accept(mock_db):
+    """Test host accepting a request."""
+    workout_id = "w1"
+    host_id = "u1"
+    requester_id = "u2"
+    
+    mock_workout = models.Workout(id=workout_id, user_id=host_id)
+    mock_member = models.WorkoutMember(workout_id=workout_id, user_id=requester_id, status="pending")
+    
+    mock_db.query.return_value.filter.return_value.first.side_effect = [
+        mock_workout, # Verify host authority
+        mock_member   # Find the request
+    ]
+    
+    mock_host = models.User(id=host_id, first_name="Alice")
+    
+    with patch("app.crud.workout.crud_user.get_user", return_value=mock_host):
+        with patch("app.crud.workout.crud_notification.create_notification") as mock_notify:
+            
+            result = crud_workout.respond_join_request(mock_db, workout_id, host_id, requester_id, "accept")
+            
+            assert "accepted" in result["message"]
+            assert mock_member.status == "accepted"
+            mock_db.commit.assert_called()
+            
+            # Notification sent to requester
+            mock_notify.assert_called_once()
+            assert mock_notify.call_args[1]['recipient_id'] == requester_id
+
+def test_respond_join_request_reject(mock_db):
+    """Test host rejecting a request (should delete the record)."""
+    workout_id = "w1"
+    host_id = "u1"
+    requester_id = "u2"
+    
+    mock_workout = models.Workout(id=workout_id, user_id=host_id)
+    mock_member = models.WorkoutMember(workout_id=workout_id, user_id=requester_id, status="pending")
+    
+    mock_db.query.return_value.filter.return_value.first.side_effect = [mock_workout, mock_member]
+    
+    result = crud_workout.respond_join_request(mock_db, workout_id, host_id, requester_id, "reject")
+    
+    assert "rejected" in result["message"]
+    mock_db.delete.assert_called_with(mock_member)
+    mock_db.commit.assert_called()
+
+def test_respond_join_request_unauthorized(mock_db):
+    """Test non-host cannot respond."""
+    workout_id = "w1"
+    host_id = "u1"
+    imposter_id = "u3"
+    
+    mock_workout = models.Workout(id=workout_id, user_id=host_id)
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_workout
+    
+    result = crud_workout.respond_join_request(mock_db, workout_id, imposter_id, "u2", "accept")
+    
+    assert result["code"] == 403
+    assert "Only the host" in result["error"]
+
+# --- Leave Workout ---
+
+def test_leave_workout_success(mock_db):
+    """Test leaving a workout deletes the member record."""
+    workout_id = "w1"
+    user_id = "u2"
+    
+    mock_member = models.WorkoutMember(workout_id=workout_id, user_id=user_id)
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_member
+    
+    result = crud_workout.leave_workout(mock_db, workout_id, user_id)
+    
+    assert "left" in result["message"]
+    mock_db.delete.assert_called_with(mock_member)
+    mock_db.commit.assert_called()
+
+def test_leave_workout_not_member(mock_db):
+    """Test leaving a workout fails if not a member."""
+    mock_db.query.return_value.filter.return_value.first.return_value = None
+    
+    result = crud_workout.leave_workout(mock_db, "w1", "u2")
+    
+    assert result["code"] == 404
+    assert "not a member" in result["error"]

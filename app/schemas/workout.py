@@ -34,6 +34,19 @@ class CardioSession(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
 
+# --- NEW: Member Schema ---
+class WorkoutMemberPublic(BaseModel):
+    user_id: str
+    status: str
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class JoinRequestAction(BaseModel):
+    action: str # "accept" or "reject"
+
+# ---------------------------
+
 class WorkoutBase(BaseModel):
     id: str
     notes: Optional[str] = None
@@ -51,6 +64,7 @@ class WorkoutDetail(WorkoutBase):
     user_id: str
     sets: list[ExerciseSet] = []
     cardio_sessions: list[CardioSession] = []
+    members: list[WorkoutMemberPublic] = [] # Added members list
 
 class ExerciseSetUpdate(BaseModel):
     id: str | None = None

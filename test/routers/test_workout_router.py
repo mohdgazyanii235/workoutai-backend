@@ -367,3 +367,75 @@ def test_get_public_workout_detail_private():
         response = client.get(f"/workouts/public/{workout_id}")
         assert response.status_code == 404
         assert response.json()["detail"] == "Workout is private"
+
+
+def test_router_request_join_success():
+    """Test POST /join triggers crud function."""
+    with patch("app.routers.workouts.workout_crud.request_join_workout") as mock_crud:
+        mock_crud.return_value = {"message": "Request sent successfully"}
+        
+        response = client.post("/workouts/w1/join")
+        
+        assert response.status_code == 200
+        assert response.json()["message"] == "Request sent successfully"
+        mock_crud.assert_called_once()
+        # Verify arguments passed to crud
+        args = mock_crud.call_args
+        assert args[0][1] == "w1" # workout_id
+        assert args[0][2] == "u1" # requester_id (current_user)
+
+def test_router_request_join_error():
+    """Test POST /join handles CRUD error dicts."""
+    with patch("app.routers.workouts.workout_crud.request_join_workout") as mock_crud:
+        mock_crud.return_value = {"error": "Private workout", "code": 403}
+        
+        response = client.post("/workouts/w1/join")
+        
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Private workout"
+
+def test_router_respond_join_success():
+    """Test PUT /requests/{id} triggers crud function."""
+    payload = {"action": "accept"}
+    
+    with patch("app.routers.workouts.workout_crud.respond_join_request") as mock_crud:
+        mock_crud.return_value = {"message": "Accepted"}
+        
+        response = client.put("/workouts/w1/requests/u2", json=payload)
+        
+        assert response.status_code == 200
+        assert response.json()["message"] == "Accepted"
+        
+        # Verify crud args
+        args = mock_crud.call_args
+        # respond_join_request(db, workout_id, host_id, requester_id, action)
+        assert args[0][1] == "w1" # workout_id
+        assert args[0][2] == "u1" # host_id (current_user)
+        assert args[0][3] == "u2" # requester_id
+        assert args[0][4] == "accept" # action
+
+def test_router_respond_join_invalid_action():
+    """Test schema validation for action."""
+    # Although schema validation happens at Pydantic level, good to ensure
+    # crud returns errors handled by router
+    with patch("app.routers.workouts.workout_crud.respond_join_request") as mock_crud:
+        mock_crud.return_value = {"error": "Invalid action", "code": 400}
+        
+        response = client.put("/workouts/w1/requests/u2", json={"action": "bad_action"})
+        
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid action"
+
+def test_router_leave_workout():
+    """Test DELETE /members triggers crud function."""
+    with patch("app.routers.workouts.workout_crud.leave_workout") as mock_crud:
+        mock_crud.return_value = {"message": "Left"}
+        
+        response = client.delete("/workouts/w1/members")
+        
+        assert response.status_code == 200
+        assert response.json()["message"] == "Left"
+        
+        args = mock_crud.call_args
+        assert args[0][1] == "w1" # workout_id
+        assert args[0][2] == "u1" # user_id

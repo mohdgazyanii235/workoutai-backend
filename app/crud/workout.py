@@ -406,6 +406,24 @@ def manage_voice_log(db: Session, voice_log: workout_schemas.VoiceLog, user_id: 
 
                 diff = current_time - last_time
                 
+                # Check absolute difference just in case logs arrive out of order slightly, though usually we care about 'recent'
+                # Actually, diff can be negative if the user edits an old log time?
+                # But typically logging_timestamp is "now" for voice logs.
+                
+                # The issue might be that `most_recent_workout` could be a *future* scheduled workout created recently.
+                # If I schedule a workout for next week, it becomes the "most recent" by created_at time in some logic, 
+                # OR if created_at is the schedule time?
+                # In `create_workout_from_log`, `created_at` is set to the scheduled time.
+                # So if I have a planned workout for next week, `most_recent_workout` might be that future one if I query by `created_at`?
+                # Wait, usually `created_at` implies when the record was made, but in your schema `Workout.created_at` is used as the "workout date".
+                
+                # FIX: We should only consolidate with "completed" or "active" workouts, usually not "planned" future ones, 
+                # unless we are adding to a plan. But the logic says "I have already done an existing workout today".
+                # So we should filter for `status != 'planned'` or check if the date is today.
+                
+                # Also, we should check if `diff` is positive. If `most_recent_workout` is in the future, diff is negative.
+                # We need to find the most recent *past* workout.
+                
                 if diff < datetime.timedelta(minutes=WORKOUT_CONSOLIDATION_BUFFER_MINUTES) and diff >= datetime.timedelta(0):
                     # 3. Consolidate!
                     print(f"Consolidating log into recent workout {most_recent_workout.id} (Diff: {diff})")
@@ -522,3 +540,113 @@ def create_manual_workout(db: Session, workout_data: workout_schemas.WorkoutUpda
         db.rollback()
         print(f"Error creating manual workout children: {e}") 
         raise e
+
+def request_join_workout(db: Session, workout_id: str, requester_id: str):
+    # 1. Verify Workout Existence & Permissions
+    workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
+    if not workout:
+        return {"error": "Workout not found", "code": 404}
+    
+    if workout.user_id == requester_id:
+        return {"error": "You are the host of this workout", "code": 400}
+
+    # Check if already a member or pending
+    existing_member = db.query(models.WorkoutMember).filter(
+        models.WorkoutMember.workout_id == workout_id,
+        models.WorkoutMember.user_id == requester_id
+    ).first()
+    
+    if existing_member:
+        if existing_member.status == 'accepted':
+            return {"error": "You have already joined this workout", "code": 400}
+        else:
+            return {"error": "Request already pending", "code": 400}
+
+    # Check Visibility Permissions
+    if workout.visibility == "private":
+        return {"error": "This workout is private", "code": 403}
+        
+    if workout.visibility == "close_friends":
+        if not crud_social.check_is_close_friend(db, owner_id=workout.user_id, friend_id=requester_id):
+             return {"error": "This workout is restricted to Close Friends", "code": 403}
+             
+    # 2. Create Pending Member Record
+    new_member = models.WorkoutMember(
+        workout_id=workout_id,
+        user_id=requester_id,
+        status="pending"
+    )
+    db.add(new_member)
+    
+    # 3. Notify Host
+    requester = crud_user.get_user(db, requester_id)
+    crud_notification.create_notification(
+        db=db,
+        recipient_id=workout.user_id,
+        sender_id=requester_id,
+        type="WORKOUT_JOIN_REQUEST",
+        title="Workout Join Request 🏋️",
+        message=f"{requester.first_name} wants to join your '{workout.workout_type or 'Workout'}'!",
+        reference_id=workout_id # Maybe link to a requests page or the workout itself
+    )
+    
+    db.commit()
+    return {"message": "Request sent successfully"}
+
+def respond_join_request(db: Session, workout_id: str, host_id: str, requester_id: str, action: str):
+    # 1. Verify Host Authority
+    workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
+    if not workout:
+        return {"error": "Workout not found", "code": 404}
+        
+    if workout.user_id != host_id:
+        return {"error": "Only the host can manage join requests", "code": 403}
+        
+    # 2. Find the Request
+    member_record = db.query(models.WorkoutMember).filter(
+        models.WorkoutMember.workout_id == workout_id,
+        models.WorkoutMember.user_id == requester_id
+    ).first()
+    
+    if not member_record:
+        return {"error": "Request not found", "code": 404}
+        
+    if member_record.status == 'accepted':
+        return {"error": "User is already a member", "code": 400}
+
+    # 3. Handle Action
+    if action == "accept":
+        member_record.status = "accepted"
+        # Notify Requester
+        host = crud_user.get_user(db, host_id)
+        crud_notification.create_notification(
+            db=db,
+            recipient_id=requester_id,
+            sender_id=host_id,
+            type="WORKOUT_JOIN_ACCEPTED",
+            title="Request Accepted! ✅",
+            message=f"{host.first_name} accepted your request to join the workout.",
+            reference_id=workout_id
+        )
+        db.commit()
+        return {"message": "User accepted into workout"}
+        
+    elif action == "reject":
+        db.delete(member_record)
+        db.commit()
+        return {"message": "Request rejected"}
+    else:
+        return {"error": "Invalid action", "code": 400}
+
+def leave_workout(db: Session, workout_id: str, user_id: str):
+    member_record = db.query(models.WorkoutMember).filter(
+        models.WorkoutMember.workout_id == workout_id,
+        models.WorkoutMember.user_id == user_id
+    ).first()
+    
+    if not member_record:
+        return {"error": "You are not a member of this workout", "code": 404}
+        
+    db.delete(member_record)
+    db.commit()
+    return {"message": "You have left the workout"}
