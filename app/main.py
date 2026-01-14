@@ -11,6 +11,7 @@ import logging
 import sys
 from app.auth import auth_service
 from app.crud import admin as admin_crud
+from app.services.scheduler import start_scheduler # Import the new service
 
 load_dotenv()
 
@@ -38,6 +39,12 @@ except Exception as e:
     raise
 
 app = FastAPI()
+
+# --- Start the Scheduler on App Startup ---
+@app.on_event("startup")
+def startup_event():
+    start_scheduler()
+# ------------------------------------------
 
 # --- Request Logging Middleware ---
 @app.middleware("http")
