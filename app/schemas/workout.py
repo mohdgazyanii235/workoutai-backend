@@ -54,7 +54,6 @@ class WorkoutBase(BaseModel):
     created_at: datetime
     visibility: str = "private"
     status: str = "completed"
-    
     model_config = ConfigDict(from_attributes=True)
 
 class Workout(WorkoutBase):
@@ -64,7 +63,11 @@ class WorkoutDetail(WorkoutBase):
     user_id: str
     sets: list[ExerciseSet] = []
     cardio_sessions: list[CardioSession] = []
-    members: list[WorkoutMemberPublic] = [] # Added members list
+    members: list[WorkoutMemberPublic] = []
+
+
+class WorkoutRequestStatus(BaseModel):
+    status: str
 
 class ExerciseSetUpdate(BaseModel):
     id: str | None = None

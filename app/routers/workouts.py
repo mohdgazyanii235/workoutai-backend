@@ -9,7 +9,7 @@ from app.database import get_db
 from app.schemas import workout as workout_schemas
 from app.schemas import user as user_schemas
 from app.crud import workout as workout_crud
-from app.crud import social as social_crud
+from app.crud import social as social_crud # Ensure this is imported
 
 router = APIRouter(
     prefix="/workouts",
@@ -23,12 +23,6 @@ def get_workouts(
     db: Session = Depends(database.get_db),
     current_user: user_schemas.User = Depends(get_current_user)
 ):
-    """
-    **Fetch all workouts for the current user.**
-
-    Returns a list of workouts ordered by creation date (newest first). 
-    This includes both completed workouts and **future scheduled workouts** (timestamps in the future).
-    """
     print("Auth header:", request.headers.get("authorization"))
     workouts = (
         db.query(models.Workout)
@@ -44,15 +38,6 @@ def get_workout(
     db: Session = Depends(database.get_db),
     current_user: user_schemas.User = Depends(get_current_user),
 ):
-    """
-    **Fetch full details of a specific workout.**
-
-    Returns the workout metadata along with all child objects:
-    - **sets**: List of strength training sets.
-    - **cardio_sessions**: List of cardio activities.
-
-    **Note:** This endpoint ensures the workout belongs to the requesting user.
-    """
     workout = (
         db.query(models.Workout)
         .filter(
@@ -72,12 +57,6 @@ def delete_workout(
     db: Session = Depends(database.get_db),
     current_user: user_schemas.User = Depends(get_current_user),
 ):
-    """
-    **Permanently delete a workout.**
-
-    This action cascades and deletes all associated sets and cardio sessions.
-    Only the owner of the workout can perform this action.
-    """
     deleted_workout = workout_crud.delete_workout(db, workout_id=workout_id, user_id=current_user.id)
     
     if not deleted_workout:
@@ -93,18 +72,6 @@ def update_workout_endpoint(
     current_user: Annotated[user_schemas.User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-    """
-    **Update an existing workout.**
-
-    This is a complex operation that handles:
-    1.  **Metadata**: Updates notes, workout type, visibility, and **created_at** (if rescheduling).
-    2.  **Sets/Cardio**: Performs a "diff" on the provided lists. 
-        - Existing IDs are updated.
-        - New items (no IDs) are created.
-        - Items missing from the payload (that exist in DB) are deleted.
-    3.  **Notifications**: If visibility changes from `private` to `public` or `close_friends`, 
-        notifications are sent to the relevant friends.
-    """
     try:
         updated_workout = workout_crud.update_workout(
             db=db,
@@ -128,16 +95,6 @@ def create_workout_manual(
     current_user: Annotated[user_schemas.User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-    """
-    **Manually create a new workout.**
-
-    This creates a workout entry without using AI voice parsing. 
-    It accepts a structured payload of sets and cardio sessions and saves them immediately.
-    
-    **Scheduling:**
-    You can optionally provide a `created_at` field in the payload to schedule this workout for a future date.
-    If omitted, it defaults to the current time.
-    """
     print("trying to create manual workout")
     try:
         new_workout = workout_crud.create_manual_workout(
@@ -156,14 +113,6 @@ def get_user_public_workouts(
     current_user: Annotated[user_schemas.User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-    """
-    **Fetch the visible workouts of another user.**
-
-    Logic enforced here:
-    1.  You must be **friends** (status='accepted') with the target user.
-    2.  If you are a **Close Friend**, you see 'public' AND 'close_friends' workouts.
-    3.  Otherwise, you only see 'public' workouts.
-    """
     if social_crud.get_friendship_status(db, user_id, current_user.id) != 'accepted':
         return []
 
@@ -180,16 +129,6 @@ def get_public_workout_detail(
     db: Session = Depends(database.get_db),
     current_user: user_schemas.User = Depends(get_current_user),
 ):
-    """
-    **View details of a shared workout.**
-
-    Used when a user clicks a notification to view a friend's workout.
-    
-    **Security:**
-    - Verifies friendship status.
-    - If visibility is `close_friends`, verifies the viewer is in the owner's Close Friends list.
-    - If restricted, raises `403 Forbidden`.
-    """
     workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
     
     if not workout:
@@ -222,10 +161,6 @@ def request_to_join_workout(
     current_user: Annotated[user_schemas.User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-    """
-    **Request to join a workout.**
-    Triggers a notification to the host.
-    """
     result = workout_crud.request_join_workout(db, workout_id, current_user.id)
     if "error" in result:
         raise HTTPException(status_code=result["code"], detail=result["error"])
@@ -239,10 +174,6 @@ def respond_to_join_request(
     current_user: Annotated[user_schemas.User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-    """
-    **Host accepts or rejects a join request.**
-    Action must be 'accept' or 'reject'.
-    """
     result = workout_crud.respond_join_request(
         db, 
         workout_id, 
@@ -260,10 +191,43 @@ def leave_workout(
     current_user: Annotated[user_schemas.User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-    """
-    **Leave a workout you have joined.**
-    """
     result = workout_crud.leave_workout(db, workout_id, current_user.id)
     if "error" in result:
         raise HTTPException(status_code=result["code"], detail=result["error"])
     return result
+
+@router.get("/status/{workout_id}", response_model=workout_schemas.WorkoutRequestStatus, summary="Get status of a workout request based on workout_id")
+def get_workout_request_status(
+    workout_id: str,
+    current_user: Annotated[user_schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    workout = (
+        db.query(models.Workout)
+        .filter(models.Workout.id == workout_id)
+        .first()
+    )
+    if not workout:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    
+    # Check visibility permissions
+    is_close_friend = False
+    if workout.visibility == 'close_friends':
+        is_close_friend = social_crud.check_is_close_friend(db, workout.user_id, current_user.id)
+
+    if (workout.visibility == 'public') or (workout.visibility == 'close_friends' and is_close_friend):
+        # Check if the user is a member of this workout
+        member_record = (
+            db.query(models.WorkoutMember)
+            .filter(
+                models.WorkoutMember.workout_id == workout_id,
+                models.WorkoutMember.user_id == current_user.id
+            )
+            .first()
+        )
+        
+        status = member_record.status if member_record else "none"
+        
+        return workout_schemas.WorkoutRequestStatus(status=status)
+    
+    return workout_schemas.WorkoutRequestStatus(status="none")

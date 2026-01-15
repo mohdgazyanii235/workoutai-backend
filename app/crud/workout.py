@@ -586,7 +586,7 @@ def request_join_workout(db: Session, workout_id: str, requester_id: str):
         sender_id=requester_id,
         type="WORKOUT_JOIN_REQUEST",
         title="Workout Join Request 🏋️",
-        message=f"{requester.first_name} wants to join your '{workout.workout_type or 'Workout'}'!",
+        message=f"{requester.first_name} wants to join your '{workout.workout_type + ' Workout' or 'Workout'}'!",
         reference_id=workout_id # Maybe link to a requests page or the workout itself
     )
     
