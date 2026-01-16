@@ -86,6 +86,14 @@ class User(Base):
     goal_bench_1rm = Column(Float, nullable=True)
 
     is_onboarded = Column(Boolean, nullable=False, default=False)
+    
+    # --- NEW: Social & Location Fields ---
+    profile_privacy = Column(String, default="private", nullable=False) # 'public' or 'private'
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    last_location_update = Column(DateTime, nullable=True)
+    # -------------------------------------
+
     workouts = relationship("Workout", back_populates="user")
     app_metric = relationship("AppMetric", back_populates="user", uselist=False)
 

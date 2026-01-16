@@ -38,30 +38,38 @@ def update_user_profile(db: Session, user_id: str, update: user_schemas.UserUpda
 
     for field, value in update_data.items():
         if field in ["weight", "fat_percentage", "deadlift_1rm", "squat_1rm", "bench_1rm"] and value:
+            # ... existing complex array handling ...
             current = getattr(db_user, field) or []
             normalized = []
             for entry in value:
-                if hasattr(entry, "model_dump"):  # Pydantic model
+                if hasattr(entry, "model_dump"):
                     data = entry.model_dump()
-                else:  # dict
+                else:
                     data = dict(entry)
-
-                # 🔹 Convert date objects to strings
                 if isinstance(data.get("date"), (datetime.date, datetime.datetime)):
                     data["date"] = data["date"].isoformat()
-
                 normalized.append(data)
-
             current.extend(normalized)
             setattr(db_user, field, current)
         else:
-            # Convert date_of_birth too, since it is a Date column (but DB can handle this type)
             setattr(db_user, field, value)
 
     db_user.is_onboarded = True
     db.commit()
     db.refresh(db_user)
     return db_user
+
+
+def update_user_location(db: Session, user_id: str, lat: float, long: float):
+    """Updates user's lat/long for discovery features"""
+    db_user = get_user(db, id=user_id)
+    if db_user:
+        db_user.latitude = lat
+        db_user.longitude = long
+        db_user.last_location_update = datetime.datetime.utcnow()
+        db.commit()
+    return db_user
+
 
 def update_history_tracked_field(db, db_user, updated_value: float, date_str: str, field_type: str):
     new_entry = {"date": date_str, "value": updated_value}

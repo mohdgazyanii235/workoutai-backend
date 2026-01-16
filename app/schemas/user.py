@@ -35,6 +35,15 @@ class UserUpdate(BaseModel):
     goal_deadlift_1rm: Optional[float] = None
     goal_squat_1rm: Optional[float] = None
     goal_bench_1rm: Optional[float] = None
+    
+    profile_privacy: Optional[str] = None # 'public' or 'private'
+
+class UserLocationUpdate(BaseModel):
+    latitude: float
+    longitude: float
+
+
+
 
 class User(UserBase):
     id: str
@@ -63,6 +72,8 @@ class User(UserBase):
     consistency_score: float = 0.0
     
     is_admin: bool = False
+
+    profile_privacy: str = "private"
     
     class Config:
         from_attributes = True

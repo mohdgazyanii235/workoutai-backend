@@ -36,6 +36,16 @@ def update_me(
     return db_user
 
 
+@router.put("/location", summary="Update User Location")
+def update_location(
+    loc_data: user_schemas.UserLocationUpdate,
+    current_user: Annotated[user_schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    user_crud.update_user_location(db, current_user.id, loc_data.latitude, loc_data.longitude)
+    return {"message": "Location updated"}
+
+
 @router.get("/{user_id}/public", response_model=user_schemas.PublicUser)
 def get_public_profile(
     user_id: str,

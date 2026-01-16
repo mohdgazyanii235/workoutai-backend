@@ -5,7 +5,8 @@ from app import models
 from app.database import get_db
 from app.auth.auth_service import get_current_user
 from app.security.security import get_api_key
-
+import datetime
+from math import radians, cos, sin, asin, sqrt
 from app.schemas import user as user_schemas
 from app.schemas import social as social_schemas
 from app.crud import social as social_crud
@@ -16,6 +17,102 @@ router = APIRouter(
     tags=["social"],
     dependencies=[Depends(get_api_key)]
 )
+
+
+def haversine(lon1, lat1, lon2, lat2):
+    """
+    Calculate the great circle distance between two points 
+    on the earth (specified in decimal degrees)
+    """
+    # convert decimal degrees to radians 
+    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+
+    # haversine formula 
+    dlon = lon2 - lon1 
+    dlat = lat2 - lat1 
+    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+    c = 2 * asin(sqrt(a)) 
+    r = 6371 # Radius of earth in kilometers. Use 3956 for miles
+    return c * r
+
+@router.get("/nearby", response_model=List[social_schemas.NearbyWorkout])
+def get_nearby_opportunities(
+    lat: float,
+    long: float,
+    radius_km: float,
+    current_user: Annotated[user_schemas.User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    Finds future public workouts from public users within a radius.
+    """
+    
+    candidates = db.query(models.User).filter(
+        models.User.profile_privacy == 'public',
+        models.User.id != current_user.id,
+        models.User.latitude.isnot(None),
+        models.User.longitude.isnot(None)
+    ).all()
+    
+    nearby_users = []
+    for u in candidates:
+        dist = haversine(long, lat, u.longitude, u.latitude)
+        if dist <= radius_km:
+            nearby_users.append((u, dist))
+            
+    if not nearby_users:
+        return []
+        
+    nearby_user_ids = [u[0].id for u in nearby_users]
+    user_dist_map = {u[0].id: u[1] for u in nearby_users}
+    
+    # 2. Fetch FUTURE planned workouts for these users that are PUBLIC
+    now = datetime.datetime.utcnow()
+    
+    workouts = db.query(models.Workout).filter(
+        models.Workout.user_id.in_(nearby_user_ids),
+        models.Workout.status == 'planned',
+        models.Workout.created_at > now,
+        models.Workout.visibility == 'public' # Only public workouts in discovery
+    ).order_by(models.Workout.created_at.asc()).all()
+    
+    results = []
+    for w in workouts:
+        host = next((u[0] for u in nearby_users if u[0].id == w.user_id), None)
+        if not host: continue
+        
+        # Hydrate PublicUser schema manually or via helper
+        friendship_status = social_crud.get_friendship_status(db, current_user.id, host.id)
+        
+        def get_latest(arr): return arr[-1]['value'] if arr else None
+        
+        public_host = user_schemas.PublicUser(
+            id=host.id,
+            first_name=host.first_name,
+            last_name=host.last_name,
+            city=host.city,
+            country=host.country,
+            bio=host.bio,
+            profile_photo_url=host.profile_photo_url,
+            current_bench_1rm=get_latest(host.bench_1rm),
+            current_squat_1rm=get_latest(host.squat_1rm),
+            current_deadlift_1rm=get_latest(host.deadlift_1rm),
+            friendship_status=friendship_status,
+            is_friend=(friendship_status == 'accepted'),
+            consistency_score=crud_utils.calculate_consistency_score(host.workouts),
+            total_workouts=len(host.workouts),
+            created_at=host.created_at
+        )
+        
+        results.append(social_schemas.NearbyWorkout(
+            user=public_host,
+            workout_id=w.id,
+            workout_type=w.workout_type or "Workout",
+            start_time=w.created_at,
+            distance_km=round(user_dist_map[host.id], 1)
+        ))
+        
+    return results
 
 @router.get("/search", response_model=List[user_schemas.PublicUser])
 def search_users(
