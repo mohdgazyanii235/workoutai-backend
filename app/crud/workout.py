@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, or_, and_
 from app import models
 from app.schemas import workout as workout_schemas
 import uuid
@@ -12,6 +12,25 @@ from . import admin as crud_admin # for rubbish log logic
 
 # --- CONFIGURATION ---
 WORKOUT_CONSOLIDATION_BUFFER_MINUTES = 30
+
+def get_user_workouts(db: Session, user_id: str, limit: int = 50, skip: int = 0):
+    """
+    Fetches workouts that are either:
+    1. Owned by the user
+    2. Joined by the user (status='accepted')
+    """
+    return db.query(models.Workout).outerjoin(
+        models.WorkoutMember,
+        and_(
+            models.WorkoutMember.workout_id == models.Workout.id,
+            models.WorkoutMember.user_id == user_id
+        )
+    ).filter(
+        or_(
+            models.Workout.user_id == user_id,
+            models.WorkoutMember.status == 'accepted'
+        )
+    ).order_by(models.Workout.created_at.desc()).offset(skip).limit(limit).all()
 
 def update_workout(
     db: Session,

@@ -24,12 +24,8 @@ def get_workouts(
     current_user: user_schemas.User = Depends(get_current_user)
 ):
     print("Auth header:", request.headers.get("authorization"))
-    workouts = (
-        db.query(models.Workout)
-        .filter(models.Workout.user_id == current_user.id)
-        .order_by(models.Workout.created_at.desc())
-        .all()
-    )
+    # Use the new CRUD function to fetch both owned and joined workouts
+    workouts = workout_crud.get_user_workouts(db, current_user.id)
     return workouts
 
 @router.get("/{workout_id}", response_model=workout_schemas.WorkoutDetail, summary="Get Workout Details")
@@ -38,16 +34,44 @@ def get_workout(
     db: Session = Depends(database.get_db),
     current_user: user_schemas.User = Depends(get_current_user),
 ):
-    workout = (
-        db.query(models.Workout)
-        .filter(
-            models.Workout.id == workout_id,
-            models.Workout.user_id == current_user.id,
-        )
-        .first()
-    )
+    # First verify if workout exists
+    workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
+    
     if not workout:
         raise HTTPException(status_code=404, detail="Workout not found")
+
+    # Check Access Permission:
+    # 1. User is owner
+    is_owner = (workout.user_id == current_user.id)
+    
+    # 2. User is an accepted member
+    is_member = False
+    member_record = db.query(models.WorkoutMember).filter(
+        models.WorkoutMember.workout_id == workout_id,
+        models.WorkoutMember.user_id == current_user.id,
+        models.WorkoutMember.status == 'accepted'
+    ).first()
+    if member_record:
+        is_member = True
+
+    if not (is_owner or is_member):
+        # Fallback to visibility check if they aren't explicitly a member (e.g. for previewing public ones)
+        # But this endpoint is usually for full details view. 
+        # If it's public/close_friends but user hasn't joined, they might use the /public/ endpoint.
+        # However, purely for robustness, let's allow read if visibility permits, just like /public endpoint.
+        
+        can_view = False
+        if workout.visibility == 'public':
+            # Check friendship status with owner
+            if social_crud.get_friendship_status(db, workout.user_id, current_user.id) == 'accepted':
+                can_view = True
+        elif workout.visibility == 'close_friends':
+            if social_crud.check_is_close_friend(db, owner_id=workout.user_id, friend_id=current_user.id):
+                can_view = True
+        
+        if not can_view:
+             raise HTTPException(status_code=403, detail="You do not have permission to view this workout.")
+
     return workout
 
 
@@ -57,11 +81,15 @@ def delete_workout(
     db: Session = Depends(database.get_db),
     current_user: user_schemas.User = Depends(get_current_user),
 ):
-    deleted_workout = workout_crud.delete_workout(db, workout_id=workout_id, user_id=current_user.id)
-    
-    if not deleted_workout:
+    # Only owner can delete
+    workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
+    if not workout:
         raise HTTPException(status_code=404, detail="Workout not found")
         
+    if workout.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the owner can delete this workout")
+
+    deleted_workout = workout_crud.delete_workout(db, workout_id=workout_id, user_id=current_user.id)
     return deleted_workout
 
 

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func, extract
+from sqlalchemy import desc, func, extract, or_, and_
 from app import models, schemas
 from app.schemas import analytics as analytics_schemas
 from app.schemas import workout as workout_schemas
@@ -74,21 +74,23 @@ def get_day_view_metrics(db: Session, user_id: str, target_date: date) -> analyt
         else:
             strain = min((daily_health.active_calories or 0) / 400, 10.0)
 
-    # 2. Fetch Workouts for that specific day
+    # 2. Fetch Workouts for that specific day (Owned + Joined)
     # We need to filter based on the date part of created_at
     # SQLAlchemy casting to date works for PostgreSQL
     
-    # Start of day in UTC? No, usually we want local day. 
-    # But since we store created_at with timezone, filtering by date might be tricky if user timezone differs.
-    # Ideally frontend sends start/end timestamps. 
-    # For now, we assume simple date matching (might need timezone adjustment in real prod).
-    
-    # We will fetch all workouts for that day assuming UTC date matches user date for simplicity 
-    # OR better: The frontend logic drives the "date", backend just queries.
-    
-    workouts = db.query(models.Workout).filter(
-        models.Workout.user_id == user_id,
-        func.date(models.Workout.created_at) == target_date
+    # Updated to fetch joined workouts as well
+    workouts = db.query(models.Workout).outerjoin(
+        models.WorkoutMember,
+        and_(
+            models.WorkoutMember.workout_id == models.Workout.id,
+            models.WorkoutMember.user_id == user_id
+        )
+    ).filter(
+        func.date(models.Workout.created_at) == target_date,
+        or_(
+            models.Workout.user_id == user_id,
+            models.WorkoutMember.status == 'accepted'
+        )
     ).order_by(models.Workout.created_at.desc()).all()
 
     return analytics_schemas.DayViewMetrics(
@@ -112,9 +114,18 @@ def calculate_momentum_streak(db: Session, user_id: str) -> int:
         models.HealthDaily.date >= thirty_days_ago
     ).all()
     
-    workouts = db.query(models.Workout).filter(
-        models.Workout.user_id == user_id,
-        models.Workout.created_at >= thirty_days_ago
+    workouts = db.query(models.Workout).outerjoin(
+        models.WorkoutMember,
+        and_(
+            models.WorkoutMember.workout_id == models.Workout.id,
+            models.WorkoutMember.user_id == user_id
+        )
+    ).filter(
+        models.Workout.created_at >= thirty_days_ago,
+        or_(
+            models.Workout.user_id == user_id,
+            models.WorkoutMember.status == 'accepted'
+        )
     ).all()
     
     # Map activity by date
@@ -198,9 +209,18 @@ def get_dashboard_metrics(db: Session, user_id: str) -> analytics_schemas.Dashbo
         models.HealthDaily.date >= start_date
     ).all()
     
-    workout_history = db.query(func.date(models.Workout.created_at)).filter(
-        models.Workout.user_id == user_id,
-        models.Workout.created_at >= start_date
+    workout_history = db.query(func.date(models.Workout.created_at)).outerjoin(
+        models.WorkoutMember,
+        and_(
+            models.WorkoutMember.workout_id == models.Workout.id,
+            models.WorkoutMember.user_id == user_id
+        )
+    ).filter(
+        models.Workout.created_at >= start_date,
+        or_(
+            models.Workout.user_id == user_id,
+            models.WorkoutMember.status == 'accepted'
+        )
     ).all()
     
     # Map for easy O(1) lookup
@@ -270,11 +290,20 @@ def get_exercise_progress(db: Session, user_id: str, exercise_name: str) -> anal
 
 def get_all_workout_dates(db: Session, user_id: str) -> list[date]:
     """
-    Fetches every unique date a user has performed a workout for the calendar view.
+    Fetches every unique date a user has performed OR joined a workout for the calendar view.
     """
     # Use func.date to truncate the timestamp to a date object at the DB level
-    results = db.query(func.date(models.Workout.created_at)).filter(
-        models.Workout.user_id == user_id
+    results = db.query(func.date(models.Workout.created_at)).outerjoin(
+        models.WorkoutMember,
+        and_(
+            models.WorkoutMember.workout_id == models.Workout.id,
+            models.WorkoutMember.user_id == user_id
+        )
+    ).filter(
+        or_(
+            models.Workout.user_id == user_id,
+            models.WorkoutMember.status == 'accepted'
+        )
     ).distinct().all()
     
     # Flatten the list of tuples [(date,), (date,)] -> [date, date]
